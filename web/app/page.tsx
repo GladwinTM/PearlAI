@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { HealthPanel } from "@/components/health-panel";
 
 // M1 placeholder: proves web → agent API → providers end to end. The real landing page arrives in M4.
@@ -9,6 +11,9 @@ export default function Home() {
         AI front desk for Pearl Dental Care. Foundations build: service status.
       </p>
       <HealthPanel />
+      <Link href="/chat" className="rounded bg-teal-700 px-4 py-2 font-medium text-white">
+        Chat with Pearl →
+      </Link>
     </main>
   );
 }

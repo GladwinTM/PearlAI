@@ -57,6 +57,23 @@ To change providers, copy `.env.example` to `.env` and edit it.
 - `reset_demo_fixtures()` rebuilds the demo scenarios (a full Thursday, a 60-minute gap that's too short for a root canal) relative to today.
 - The public calendar (`get_calendar`) masks patient names ("Ravi K.").
 
+## Agent design: making a local 8B model reliable
+
+A small local model will happily invent slots, guess phone numbers and "check" without calling a tool.
+Prompt rules help, but the important guarantees are enforced in code:
+
+- **No invented slots.** `book_appointment` and `reschedule_appointment` only accept a slot that `check_availability` returned in this conversation, and the database rejects double booking anyway.
+- **Grounding check.** Every clock time Pearl says must come from a tool result (or the caller). If it doesn't, the reply is retracted in the UI and the model is told to check availability first.
+- **No guessed identities.** `lookup_patient` only accepts numbers the caller actually said (or the caller ID).
+- **Writes are scoped.** Pearl can only book, change or cancel for patients identified in this conversation.
+- **"Let me check…" with no tool call** gets a nudge to actually call the tool.
+- **Safety backstop.** A regex detector runs before the LLM. If a red flag fires and the model doesn't escalate, the loop escalates (urgent) deterministically.
+- **Dates come from a table, not arithmetic.** The prompt carries a 14-day table that resolves "next Thursday" and "early next week".
+- **Token-efficient tool I/O.** The model sees short handles (`P1`, `A1`, `priya`) and compact times instead of UUIDs, which means fewer generated tokens (lower latency) and no mis-copied ids.
+- **Prompt-cache friendly.** The system prompt is identical across callers and stable within the hour, and caller ID is passed as data. Ollama's context is raised to 8k, because the 4k default silently truncated the prompt.
+
+Try it from the terminal: `cd agent && uv run python scripts/chat_cli.py --persona ravi`.
+
 ## Repo layout
 
 ```

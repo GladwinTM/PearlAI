@@ -41,7 +41,7 @@ extend-exclude = [".venv"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC"]
-ignore = ["RUF001", "RUF002", "RUF003"]  # en dashes / unicode in prose are intentional
+ignore = ["RUF001", "RUF002", "RUF003", "E501"]  # unicode prose is intentional; the formatter owns line length
 
 [tool.pyright]
 include = ["src", "scripts", "tests"]

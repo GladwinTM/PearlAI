@@ -7,6 +7,7 @@ This is the ONLY Python module allowed to contain model names / provider URLs as
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -50,6 +51,10 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.3
     llm_disable_thinking: bool = True
     llm_keep_alive: str = "30m"  # Ollama only; ignored by hosted providers
+    # Ollama only. Ollama's default context (4096) is smaller than prompt + tools + history, and it truncates
+    # silently. The OpenAI endpoint can't set num_ctx per request, so warmup creates a derived model
+    # (same weights, no download) named by `llm_request_model`. 0 = use LLM_MODEL as-is.
+    llm_num_ctx: int = 8192
 
     judge_base_url: str = "http://localhost:11434/v1"
     judge_api_key: SecretStr = SecretStr("ollama")
@@ -101,6 +106,14 @@ class Settings(BaseSettings):
     @property
     def llm_is_ollama(self) -> bool:
         return ":11434" in self.llm_base_url
+
+    @property
+    def llm_request_model(self) -> str:
+        """The model name actually sent to the LLM API (a derived Ollama model when LLM_NUM_CTX is set)."""
+        if self.llm_is_ollama and self.llm_num_ctx > 0:
+            base = re.sub(r"[^a-z0-9]+", "-", self.llm_model.lower()).strip("-")
+            return f"smiledesk/{base}:ctx{self.llm_num_ctx}"
+        return self.llm_model
 
     @property
     def stt_model_ref(self) -> str:

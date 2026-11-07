@@ -52,7 +52,13 @@ class WarmupState:
                 "postgres",
                 local="127.0.0.1" in s.supabase_url or "localhost" in s.supabase_url,
             ),
-            "llm": Component("llm", "Language model", "openai_compatible", s.llm_model, local=s.llm_is_ollama),
+            "llm": Component(
+                "llm",
+                "Language model",
+                "ollama" if s.llm_is_ollama else "openai_compatible",
+                s.llm_model,
+                local=s.llm_is_ollama,
+            ),
             "stt": Component(
                 "stt", "Speech recognition", s.stt_provider, s.stt_model, local=s.stt_provider == "local_whisper"
             ),
@@ -167,7 +173,14 @@ async def run_warmup() -> None:
     st.started_at = time.time()
     logger.info("[warmup] starting")
 
-    await _run("database", check_database, s)
+    db_ok = await _run("database", check_database, s)
+    if db_ok:
+        try:
+            from smiledesk.agent.prompts import sync_prompt_versions
+
+            await asyncio.to_thread(sync_prompt_versions)
+        except Exception as e:
+            logger.error(f"[warmup] prompt sync failed: {e}")
 
     async def _embeddings() -> str:
         dim = await check_embedding_dim(s)
@@ -182,10 +195,15 @@ async def run_warmup() -> None:
         kb.fix = "Fix the rows above first."
 
     async def _llm() -> str:
-        await check_llm(s)
+        info = await check_llm(s)
         t0 = time.perf_counter()
         await warmup_llm(s)
-        return f"loaded, first reply in {int((time.perf_counter() - t0) * 1000)} ms"
+        if st.components["database"].status == "ready":
+            from smiledesk.agent.core import prefill_prompt_cache
+
+            await prefill_prompt_cache(s)
+        ctx = f", context {s.llm_num_ctx}" if info["request_model"] != s.llm_model else ""
+        return f"loaded{ctx}, first reply in {int((time.perf_counter() - t0) * 1000)} ms"
 
     async def _stt() -> str:
         stt = get_stt()

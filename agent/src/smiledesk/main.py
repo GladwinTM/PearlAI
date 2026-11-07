@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from smiledesk.api import calendar, demo, health
+from smiledesk.api import calendar, chat, demo, health
 from smiledesk.config import get_settings
 from smiledesk.warmup import run_warmup
 
@@ -41,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(calendar.router)
     app.include_router(demo.router)
+    app.include_router(chat.router)
     return app
 
 

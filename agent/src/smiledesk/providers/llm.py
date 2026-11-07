@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
 from openai import AsyncOpenAI
 
 from smiledesk.config import Settings, get_settings
@@ -47,6 +48,26 @@ def llm_extra_body(settings: Settings | None = None) -> dict[str, Any]:
     return body
 
 
+async def ensure_ollama_context_model(settings: Settings | None = None) -> str | None:
+    """Create the derived Ollama model with LLM_NUM_CTX if it doesn't exist yet (shares weights; instant)."""
+    s = settings or get_settings()
+    target = s.llm_request_model
+    if target == s.llm_model:
+        return None
+    root = s.llm_base_url.rstrip("/").removesuffix("/v1")
+    async with httpx.AsyncClient(timeout=120) as http:
+        tags = (await http.get(f"{root}/api/tags")).json().get("models", [])
+        if any(m.get("name") == target for m in tags):
+            return target
+        r = await http.post(
+            f"{root}/api/create",
+            json={"model": target, "from": s.llm_model, "parameters": {"num_ctx": s.llm_num_ctx}, "stream": False},
+        )
+        if r.status_code != 200:
+            raise RuntimeError(f"Could not create {target} from {s.llm_model}: {r.text[:200]}")
+    return target
+
+
 async def check_llm(settings: Settings | None = None) -> dict[str, Any]:
     """Cheap health check: the endpoint answers and the configured model exists."""
     s = settings or get_settings()
@@ -55,14 +76,15 @@ async def check_llm(settings: Settings | None = None) -> dict[str, Any]:
     if s.llm_model not in ids:
         hint = f"ollama pull {s.llm_model}" if s.llm_is_ollama else "check LLM_MODEL"
         raise RuntimeError(f"Model '{s.llm_model}' not found at {s.llm_base_url}. Fix: {hint}")
-    return {"model": s.llm_model}
+    await ensure_ollama_context_model(s)
+    return {"model": s.llm_model, "request_model": s.llm_request_model}
 
 
 async def warmup_llm(settings: Settings | None = None) -> None:
     """Load the model into memory (and keep it there) so the first real turn is fast."""
     s = settings or get_settings()
     await get_llm_client(s).chat.completions.create(
-        model=s.llm_model,
+        model=s.llm_request_model,
         messages=[{"role": "user", "content": "Reply with the single word: ready"}],
         max_tokens=5,
         temperature=0,
