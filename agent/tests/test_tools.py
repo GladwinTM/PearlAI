@@ -374,9 +374,27 @@ async def test_booking_needs_a_confirmation_question_for_that_slot(clean_db: Cli
     ctx.last_assistant_text = f"I have {first['label']} or {second['label']}. Shall I book {second['label']}?"
     assert "Not confirmed" in (await call(ctx, "book_appointment", **args))["error"]
 
+    # "Shall I book it?" after listing two times: which one? Not a confirmation.
+    ctx.last_assistant_text = f"I have {first['label']} or {second['label']}. Shall I book it?"
+    assert "Not confirmed" in (await call(ctx, "book_appointment", **args))["error"]
+
     # The caller said yes to a question naming exactly this slot: book it.
     ctx.last_assistant_text = (
         f"Thursday is full. I have {first['label']} or {second['label']}.\n"
         f"Shall I book a checkup for Ravi on {first['label']}?"  # the label ends in "Dr. Priya"
     )
     assert (await call(ctx, "book_appointment", **args))["booked"]
+
+
+async def test_booking_confirmed_by_shall_i_book_it_after_naming_one_slot(clean_db: Client) -> None:
+    ctx = await ravi_ctx()
+    avail = await call(
+        ctx, "check_availability", date=next_weekday(WED).isoformat(), appointment_type="checkup", dentist_id="priya"
+    )
+    slot = avail["slots"][0]
+    ctx.last_assistant_text = f"The earliest is {slot['label']}. Shall I book it for you?"
+    out = await call(
+        ctx, "book_appointment", patient_id="P1", dentist_id=slot["dentist_id"], appointment_type="checkup",
+        starts_at=slot["start"],
+    )  # fmt: skip
+    assert out["booked"]

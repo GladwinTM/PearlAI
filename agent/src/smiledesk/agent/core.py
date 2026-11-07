@@ -509,13 +509,18 @@ async def _run_turn(conv: Conversation, user_text: str, llm: ChatLLM) -> AsyncIt
             )
             async for ev in run_tool(call, auto=True):
                 yield ev
-            note = " A staff member will call you within 15 minutes."
-            if safety.breathing_or_swallowing:
+            # Escalation always happens; only add what Pearl hasn't already told them.
+            said = final_text.lower()
+            note = (
+                "" if re.search(r"\bstaff\b|\bcall you\b", said) else " A staff member will call you within 15 minutes."
+            )
+            if safety.breathing_or_swallowing and "emergency" not in said:
                 note += " If breathing or swallowing is getting harder, please go to the nearest hospital emergency department now."
-            final_text = (final_text + note).strip()
-            spoken.append(note.strip())
-            conv.messages.append({"role": "assistant", "content": final_text})
-            yield {"type": "token", "text": note}
+            if note:
+                final_text = (final_text + note).strip()
+                spoken.append(note.strip())
+                conv.messages.append({"role": "assistant", "content": final_text})
+                yield {"type": "token", "text": note}
 
         if not final_text.strip():
             final_text = "Sorry, I didn't catch that. Could you say it again?"

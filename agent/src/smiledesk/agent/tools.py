@@ -106,8 +106,12 @@ def _unconfirmed(ctx: ToolContext, when: datetime) -> ToolResult | None:
     # "Dr. Priya" isn't the end of a sentence.
     text = re.sub(r"\b(Dr|Mr|Mrs|Ms|St)\.", r"\1", prev)
     questions = re.findall(r"[^.?!\n]*\?", text)
-    if questions and spoken_times(questions[-1]) == {when.strftime("%H:%M")}:
-        return None
+    target = {when.strftime("%H:%M")}
+    if questions:
+        asked = spoken_times(questions[-1])
+        # "Shall I book Friday at 9 AM?", or "The earliest is Friday at 9 AM. Shall I book it?" (one time in total).
+        if asked == target or (not asked and spoken_times(text) == target):
+            return None
     return err(
         "Not confirmed yet: the caller hasn't said yes to this exact slot.",
         f"Don't book yet and don't say it's booked. Ask one question naming who, the visit, the dentist, "

@@ -187,3 +187,11 @@ async def test_faq_answer_with_the_tool_is_not_nudged(clean_db: Client) -> None:
     llm = ScriptedLLM([("", [("get_clinic_info", {"question": "parking"})]), ("Yes, free basement parking.", [])])
     ev = await collect(new_conv(), "Is there parking?", llm)
     assert "retract" not in types(ev) and "nudged" not in ev[-1]["timings"]
+
+
+async def test_safety_backstop_does_not_repeat_what_pearl_said(clean_db: Client) -> None:
+    llm = ScriptedLLM([("This may be serious. A staff member will call you shortly.", [])])
+    ev = await collect(new_conv(), "My face is swollen and I have a fever", llm)
+    assert any(e["type"] == "tool_call" and e["name"] == "escalate_to_human" for e in ev)  # still escalated
+    assert ev[-1]["text"].lower().count("staff member") == 1
+    rows(clean_db.table("escalations").delete().like("reason", "Safety backstop%").execute())
