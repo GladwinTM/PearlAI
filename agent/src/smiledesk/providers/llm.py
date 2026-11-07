@@ -35,14 +35,15 @@ def get_judge_client(settings: Settings | None = None) -> AsyncOpenAI:
 def llm_extra_body(settings: Settings | None = None) -> dict[str, Any]:
     """Provider-specific request fields, kept in one place.
 
-    - `reasoning_effort: "none"` turns off Qwen3 thinking on Ollama's OpenAI endpoint
-      (measured: ~35 s → ~0.5 s for a short reply on an M-series Mac).
+    - `reasoning_effort` (LLM_REASONING_EFFORT, default "none") turns off Qwen3 thinking on Ollama's OpenAI endpoint
+      (measured: ~35 s → ~0.5 s for a short reply on an M-series Mac). Models that always reason take their lowest
+      allowed value instead, e.g. "low" for Groq's gpt-oss.
     - `keep_alive` keeps the model resident in Ollama between turns.
     """
     s = settings or get_settings()
     body: dict[str, Any] = {}
     if s.llm_disable_thinking:
-        body["reasoning_effort"] = "none"
+        body["reasoning_effort"] = s.llm_reasoning_effort
     if s.llm_is_ollama:
         body["keep_alive"] = s.llm_keep_alive
     return body

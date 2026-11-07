@@ -73,3 +73,13 @@ async def test_embedding_dim_mismatch_fails_clearly(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(emb, "get_embedder", lambda settings=None: Fake())
     with pytest.raises(emb.EmbeddingDimensionError, match="384 dims"):
         await emb.check_embedding_dim(_settings())
+
+
+def test_reasoning_effort_is_configurable_per_model() -> None:
+    from smiledesk.config import Settings
+    from smiledesk.providers.llm import llm_extra_body
+
+    assert llm_extra_body(Settings(_env_file=None))["reasoning_effort"] == "none"  # pyright: ignore[reportCallIssue]
+    groq = Settings(_env_file=None, llm_base_url="https://api.groq.com/openai/v1", llm_reasoning_effort="low")  # pyright: ignore[reportCallIssue]
+    body = llm_extra_body(groq)
+    assert body == {"reasoning_effort": "low"}  # no Ollama-only keep_alive for hosted providers

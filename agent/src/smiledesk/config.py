@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     llm_model: str = "qwen3:8b"
     llm_temperature: float = 0.3
     llm_disable_thinking: bool = True
+    # Sent as `reasoning_effort` when thinking is "disabled". qwen3 (Ollama): "none". Models that can't switch reasoning
+    # off accept only some values, e.g. Groq gpt-oss: "low" | "medium" | "high" ("none" is rejected there).
+    llm_reasoning_effort: str = "none"
     llm_keep_alive: str = "30m"  # Ollama only; ignored by hosted providers
     # Ollama only. Ollama's default context (4096) is smaller than prompt + tools + history, and it truncates
     # silently. The OpenAI endpoint can't set num_ctx per request, so warmup creates a derived model

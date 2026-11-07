@@ -3324,6 +3324,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "fastembed" },
     { name = "httpx" },
     { name = "loguru" },
     { name = "openai" },
@@ -3331,11 +3332,6 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "supabase" },
     { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-fastembed = [
-    { name = "fastembed" },
 ]
 
 [package.dev-dependencies]
@@ -3349,7 +3345,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.162.0" },
-    { name = "fastembed", marker = "extra == 'fastembed'", specifier = ">=0.9.1" },
+    { name = "fastembed", specifier = ">=0.9.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "openai", specifier = ">=3.46.0" },
@@ -3358,7 +3354,6 @@ requires-dist = [
     { name = "supabase", specifier = ">=2.34.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
 ]
-provides-extras = ["fastembed"]
 
 [package.metadata.requires-dev]
 dev = [

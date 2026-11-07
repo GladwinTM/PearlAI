@@ -1,4 +1,12 @@
+import path from "node:path";
+
+import { loadEnvConfig } from "@next/env";
 import type { NextConfig } from "next";
+
+// One `.env` in the repo root configures both apps (the agent reads it too). Next itself only looks in web/,
+// so load the root file here; web/.env* files still work and take precedence. On Vercel there is no file:
+// variables come from the project settings.
+loadEnvConfig(path.resolve(process.cwd(), ".."));
 
 const nextConfig: NextConfig = {
   /* config options here */
