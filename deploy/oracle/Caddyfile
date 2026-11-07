@@ -1,0 +1,8 @@
+# HTTPS for the agent API. Caddy obtains and renews the certificate for AGENT_DOMAIN by itself.
+{$AGENT_DOMAIN} {
+	encode gzip
+	reverse_proxy agent:8080 {
+		# Chat replies stream as Server-Sent Events: pass every chunk through immediately.
+		flush_interval -1
+	}
+}

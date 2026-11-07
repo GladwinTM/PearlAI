@@ -163,3 +163,20 @@ async def test_fallback_gives_up_with_the_last_429() -> None:
     except RateLimitError:
         return
     raise AssertionError("expected RateLimitError")
+
+
+def test_hosted_defaults_are_overridden_by_the_server_env_file(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from smiledesk.config import Settings
+
+    defaults = tmp_path / "hosted.env"
+    defaults.write_text("LLM_MODEL=from-defaults\nSTT_PROVIDER=groq\nLLM_BASE_URL=https://defaults.test/v1\n")
+    server_env = tmp_path / ".env"
+    server_env.write_text("LLM_MODEL=from-server-env\n")
+    for k in ("LLM_MODEL", "STT_PROVIDER", "LLM_BASE_URL"):
+        monkeypatch.delenv(k, raising=False)
+
+    s = Settings(_env_file=(defaults, server_env))  # pyright: ignore[reportCallIssue]
+    assert s.llm_model == "from-server-env"  # the server's .env wins over hosted defaults
+    assert s.stt_provider == "groq"  # untouched defaults still apply
+    monkeypatch.setenv("LLM_BASE_URL", "https://env.test/v1")
+    assert Settings(_env_file=(defaults, server_env)).llm_base_url == "https://env.test/v1"  # pyright: ignore[reportCallIssue]

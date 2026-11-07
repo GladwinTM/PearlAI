@@ -33,22 +33,10 @@ ENV PATH="/app/.venv/bin:$PATH"
 RUN python -c "from smiledesk.providers.tts import KokoroTTS; KokoroTTS('af_heart', 'kokoro-82m').warmup()" \
     && python -c "from fastembed import TextEmbedding; TextEmbedding('nomic-ai/nomic-embed-text-v1.5')"
 
-# Non-secret hosted defaults (free tiers): Groq for the LLM with per-model fallbacks, Groq Whisper, in-process
-# fastembed + Kokoro, demo limits. Secrets (API keys, Supabase URL/key, TURN) come from the platform's secret store.
-ENV LLM_BASE_URL=https://api.groq.com/openai/v1 \
-    LLM_MODEL=openai/gpt-oss-20b \
-    LLM_DISABLE_THINKING=true \
-    LLM_REASONING_EFFORT=low \
-    LLM_FALLBACK_MODELS=openai/gpt-oss-120b,qwen/qwen3.8-27b:none \
-    STT_PROVIDER=groq \
-    STT_MODEL=whisper-large-v3-turbo \
-    EMBED_PROVIDER=fastembed \
-    EMBED_MODEL=nomic-ai/nomic-embed-text-v1.5 \
-    DEMO_MODE=true \
-    MAX_VOICE_SESSIONS=2 \
-    MAX_VOICE_SESSION_SECONDS=240 \
-    MAX_VOICE_CALLS_PER_DAY=60 \
-    RATE_LIMIT_PER_MINUTE=30 \
+# Non-secret hosted defaults live in hosted.env, loaded before the server's .env (which overrides them).
+# Real environment variables (e.g. platform secrets) still win over both.
+COPY hosted.env ./hosted.env
+ENV SMILEDESK_DEFAULTS_FILE=/app/hosted.env \
     PORT=8080
 
 EXPOSE 8080

@@ -1,7 +1,7 @@
 # Keeps the free Supabase project awake (/api/health queries the DB) and rebuilds the demo fixtures daily,
 # so "Thursday is full" and the other scenarios stay relative to the current week.
 # Set the repository variable AGENT_URL (Settings → Secrets and variables → Actions → Variables),
-# e.g. https://smiledesk-agent.fly.dev
+# e.g. https://141-148-12-34.sslip.io
 name: keepalive
 
 on:

@@ -1,0 +1,31 @@
+# SmileDesk agent on an Oracle Cloud (or any) VM: the agent container behind Caddy, which serves HTTPS with an
+# automatic Let's Encrypt certificate. Run from this folder:  docker compose up -d --build
+# Needs: ../../.env (the server's secrets, never committed) and AGENT_DOMAIN in ./.env, e.g. 141-148-12-34.sslip.io
+services:
+  agent:
+    build: ../../agent
+    restart: unless-stopped
+    volumes:
+      # The agent reads /app/.env itself (same parser as local dev, so quoted values like ICE_SERVERS_JSON work).
+      - ../../.env:/app/.env:ro
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      - agent
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      AGENT_DOMAIN: ${AGENT_DOMAIN:?set AGENT_DOMAIN in deploy/oracle/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -7,6 +7,7 @@ This is the ONLY Python module allowed to contain model names / provider URLs as
 from __future__ import annotations
 
 import json
+import os
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -30,9 +31,15 @@ MLX_WHISPER_MODELS: dict[str, str] = {
 }
 
 
+# Optional defaults file loaded BEFORE the .env files (the hosted image points it at hosted.env). Precedence, lowest
+# first: field defaults < defaults file < repo .env < agent/.env < real environment variables.
+_DEFAULTS_FILE = os.environ.get("SMILEDESK_DEFAULTS_FILE")
+_ENV_FILES = (*((Path(_DEFAULTS_FILE),) if _DEFAULTS_FILE else ()), REPO_ROOT / ".env", AGENT_DIR / ".env")
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(REPO_ROOT / ".env", AGENT_DIR / ".env"),
+        env_file=_ENV_FILES,
         env_file_encoding="utf-8",
         extra="ignore",
     )
