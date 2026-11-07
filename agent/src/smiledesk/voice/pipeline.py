@@ -43,7 +43,7 @@ from smiledesk.agent.clinic import load_clinic
 from smiledesk.agent.core import store
 from smiledesk.agent.personas import caller_phone_for
 from smiledesk.agent.prompts import render
-from smiledesk.agent.tools import TOOL_SCHEMAS, ToolContext, execute_tool
+from smiledesk.agent.tools import TOOL_SCHEMAS, ToolContext, assistant_text_before_last_user, execute_tool
 from smiledesk.clock import now
 from smiledesk.config import Settings, get_settings
 from smiledesk.providers.llm import llm_extra_body
@@ -166,6 +166,8 @@ async def run_voice_session(connection: Any, persona: str | None = None, convers
             # rather than leave dead air. Only once per turn, and only if Pearl hasn't already said "let me check".
             session.filler_done = True
             await params.llm.push_frame(TTSSpeakFrame(FILLER))
+        # Writes need Pearl's previous line to have been a confirmation question naming that slot.
+        ctx.last_assistant_text = assistant_text_before_last_user(context.get_messages())
         result, ms = await execute_tool(name, args, ctx)
         if name in WRITE_TOOLS and "error" not in result:
             session.last_write_turn = session.turn_index

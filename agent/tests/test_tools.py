@@ -342,3 +342,41 @@ async def test_execute_tool_never_raises(clean_db: Client) -> None:
     assert "Missing required" in missing["error"]
     extra, _ = await execute_tool("lookup_patient", {"phone": "1", "sql": "drop"}, ctx)  # unknown args are dropped
     assert "error" in extra
+
+
+async def test_booking_needs_a_confirmation_question_for_that_slot(clean_db: Client) -> None:
+    ctx = await ravi_ctx()
+    avail = await call(
+        ctx, "check_availability", date=next_weekday(WED).isoformat(), appointment_type="checkup", dentist_id="priya"
+    )
+    first, second = avail["slots"][0], avail["slots"][1]
+    args = {
+        "patient_id": "P1",
+        "dentist_id": first["dentist_id"],
+        "appointment_type": "checkup",
+        "starts_at": first["start"],
+    }
+
+    # Offering options and hearing "the first one" is a choice, not a yes.
+    ctx.last_assistant_text = f"I have {first['label']} or {second['label']}. Which suits you?"
+    out = await call(ctx, "book_appointment", **args)
+    assert "Not confirmed" in out["error"] and "Shall I book" in out["hint"]
+
+    # A statement naming the slot (no question) isn't a confirmation either.
+    ctx.last_assistant_text = f"Okay, {first['label']}."
+    assert "Not confirmed" in (await call(ctx, "book_appointment", **args))["error"]
+
+    # A confirmation question for a different slot doesn't count.
+    ctx.last_assistant_text = f"Shall I book a checkup for Ravi with Dr. Priya at {second['label']}?"
+    assert "Not confirmed" in (await call(ctx, "book_appointment", **args))["error"]
+
+    # Options listed, then a question about one of them: the question is what the caller answered.
+    ctx.last_assistant_text = f"I have {first['label']} or {second['label']}. Shall I book {second['label']}?"
+    assert "Not confirmed" in (await call(ctx, "book_appointment", **args))["error"]
+
+    # The caller said yes to a question naming exactly this slot: book it.
+    ctx.last_assistant_text = (
+        f"Thursday is full. I have {first['label']} or {second['label']}.\n"
+        f"Shall I book a checkup for Ravi on {first['label']}?"  # the label ends in "Dr. Priya"
+    )
+    assert (await call(ctx, "book_appointment", **args))["booked"]

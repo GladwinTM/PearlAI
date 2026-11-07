@@ -100,7 +100,11 @@ function PearlBubble({ m }: { m: Message }) {
             {p.retracted ? (
               <>
                 <del className="decoration-muted-foreground/60">{p.text}</del>
-                <span className="mt-1 block text-xs">Retracted: Pearl mentioned times no tool had returned, so she&apos;s checking first.</span>
+                <span className="mt-1 block text-xs">
+                  {p.retractReason === "unsourced_fact"
+                    ? "Retracted: Pearl answered a clinic question from memory, so she's looking it up."
+                    : "Retracted: Pearl mentioned times no tool had returned, so she's checking first."}
+                </span>
               </>
             ) : (
               <span className="whitespace-pre-wrap">{p.text}</span>

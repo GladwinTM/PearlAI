@@ -160,3 +160,50 @@ def test_ungrounded() -> None:
     grounded = {"09:00", "10:30"}
     assert ungrounded("How about nine AM or ten thirty AM?", grounded) == set()
     assert ungrounded("I have 9 AM or 2 PM", grounded) == {"14:00"}
+
+
+def test_assistant_text_before_last_user() -> None:
+    from smiledesk.agent.tools import assistant_text_before_last_user as before
+
+    msgs = [
+        {"role": "assistant", "content": "Shall I book it for 9 AM?"},
+        {"role": "user", "content": "yes"},
+        {"role": "assistant", "content": "", "tool_calls": [{"id": "c1"}]},  # this turn's tool call: ignored
+    ]
+    assert before(msgs) == "Shall I book it for 9 AM?"
+    # Tool-call turns (empty content) are skipped back to the last thing Pearl actually said.
+    assert (
+        before(
+            [
+                {"role": "assistant", "content": "Which day?"},
+                {"role": "assistant", "content": ""},
+                {"role": "user", "content": "Fri"},
+            ]
+        )
+        == "Which day?"
+    )
+    # Two user messages in a row: nothing was asked in between.
+    assert (
+        before(
+            [{"role": "assistant", "content": "Hi"}, {"role": "user", "content": "a"}, {"role": "user", "content": "b"}]
+        )
+        == ""
+    )
+    assert before([]) == ""
+
+
+def test_fact_questions_are_recognized() -> None:
+    from smiledesk.agent.core import _FACT_QUESTION  # pyright: ignore[reportPrivateUsage]
+
+    for q in [
+        "Do you take insurance?",
+        "How much is a cleaning?",
+        "Is there parking?",
+        "Can I pay by card?",
+        "Where is the clinic located?",
+        "Are you open on Sunday?",
+        "What's your cancellation policy?",
+    ]:
+        assert _FACT_QUESTION.search(q), q
+    for q in ["Book a checkup next Thursday", "The earliest one please", "Yes", "Cancel my appointment"]:
+        assert not _FACT_QUESTION.search(q), q

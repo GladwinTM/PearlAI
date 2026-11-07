@@ -4,7 +4,7 @@
 export type Channel = "chat" | "voice";
 
 export type Part =
-  | { kind: "text"; text: string; retracted?: boolean; segment?: number }
+  | { kind: "text"; text: string; retracted?: boolean; retractReason?: string; segment?: number }
   | { kind: "tool"; id: string; name: string; auto?: boolean; ms?: number; ok?: boolean }
   | { kind: "notice"; tone: NoticeTone; text: string };
 
@@ -217,19 +217,22 @@ export function talkReducer(state: TalkState, a: TalkAction): TalkState {
         for (let i = parts.length - 1; i >= 0; i--) {
           const p = parts[i];
           if (p.kind === "text" && !p.retracted) {
-            parts[i] = { ...p, retracted: true };
+            parts[i] = { ...p, retracted: true, retractReason: a.reason };
             break;
           }
         }
         return { ...m, parts };
       });
+      const facts = a.reason === "unsourced_fact";
       return {
         ...next,
         timeline: push(state, {
           kind: "retract",
           channel: "chat",
-          title: "Reply retracted: unverified times",
-          detail: `${a.times.join(", ")} didn't come from a tool result. Pearl was told to check availability first.`,
+          title: facts ? "Reply retracted: clinic fact not from the FAQ" : "Reply retracted: unverified times",
+          detail: facts
+            ? "Pearl answered a clinic question from memory. She was told to look it up with get_clinic_info."
+            : `${a.times.join(", ")} didn't come from a tool result. Pearl was told to check availability first.`,
         }),
       };
     }

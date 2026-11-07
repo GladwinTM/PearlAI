@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     ice_servers_json: str = ""
 
     # ── App
-    prompt_version: str = "v1"
+    prompt_version: str = "v2"
     web_origin: str = "http://localhost:3000"
     demo_mode: bool = True
     max_voice_session_seconds: int = 300

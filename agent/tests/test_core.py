@@ -164,3 +164,26 @@ def test_think_filter() -> None:
     f = _ThinkFilter()
     out = f.feed("<thi") + f.feed("nk>secret</th") + f.feed("ink>Hello <b>there</b>") + f.flush()
     assert out == "Hello <b>there</b>"
+
+
+async def test_clinic_facts_without_the_faq_are_retracted_and_looked_up(clean_db: Client) -> None:
+    llm = ScriptedLLM(
+        [
+            ("Yes, we accept all insurance.", []),  # answered from "memory": not allowed
+            ("", [("get_clinic_info", {"question": "Do you take insurance?"})]),
+            ("We accept cashless claims from several insurers.", []),
+        ]
+    )
+    conv = new_conv()
+    ev = await collect(conv, "Do you take insurance?", llm)
+    retract = next(e for e in ev if e["type"] == "retract")
+    assert retract["reason"] == "unsourced_fact" and "accept all insurance" in retract["text"]
+    assert ev[-1]["tools_called"] == ["get_clinic_info"]
+    assert ev[-1]["timings"]["nudged"] == "unsourced_fact"
+    assert "accept all insurance" not in ev[-1]["text"]
+
+
+async def test_faq_answer_with_the_tool_is_not_nudged(clean_db: Client) -> None:
+    llm = ScriptedLLM([("", [("get_clinic_info", {"question": "parking"})]), ("Yes, free basement parking.", [])])
+    ev = await collect(new_conv(), "Is there parking?", llm)
+    assert "retract" not in types(ev) and "nudged" not in ev[-1]["timings"]

@@ -30,7 +30,13 @@ from smiledesk.agent.grounding import spoken_times, times_in, ungrounded
 from smiledesk.agent.personas import caller_phone_for
 from smiledesk.agent.prompts import render
 from smiledesk.agent.safety import SafetyResult, check_message
-from smiledesk.agent.tools import TOOL_SCHEMAS, ToolContext, execute_tool, phones_in_text
+from smiledesk.agent.tools import (
+    TOOL_SCHEMAS,
+    ToolContext,
+    assistant_text_before_last_user,
+    execute_tool,
+    phones_in_text,
+)
 from smiledesk.clock import now
 from smiledesk.config import Settings, get_settings
 from smiledesk.providers.llm import get_llm_client, llm_extra_body
@@ -44,6 +50,19 @@ _ANNOUNCED_ACTION = re.compile(
 )
 NUDGE = (
     "[Clinic system note, not from the patient: you said you would check. Call the right tool now instead of replying.]"
+)
+
+
+# Questions whose answer must come from the FAQ (get_clinic_info), never from the model's memory.
+_FACT_QUESTION = re.compile(
+    r"\b(insurance|insured|insurer|price|prices|pricing|cost|costs|how much|fee|fees|charges?|payment|pay (by|with|in)"
+    r"|cards?|upi|cash|emi|parking|park\b|address|located|location|directions|where (are|is) (you|the clinic)"
+    r"|opening hours|what time do you (open|close)|are you open|policy|policies|aftercare|invisalign|aligners?)\b",
+    re.I,
+)
+NUDGE_FACTS = (
+    "[Clinic system note, not from the patient: that is a question about the clinic. Call get_clinic_info with it now "
+    "and answer only from what it returns.]"
 )
 
 
@@ -312,6 +331,8 @@ async def _run_turn(conv: Conversation, user_text: str, llm: ChatLLM) -> AsyncIt
         yield {"type": "safety", "rules": safety.rules, "instruction": safety.instruction}
 
     conv.messages.append({"role": "user", "content": user_text})
+    # What Pearl asked just before this message: writes need it to be a confirmation of that exact slot.
+    conv.ctx.last_assistant_text = assistant_text_before_last_user(conv.messages)
     conv.ctx.allowed_phones |= phones_in_text(user_text)
     conv.grounded_times |= spoken_times(user_text)  # echoing the caller's own time ("7 PM isn't free") is fine
     if conv.caller_phone:
@@ -429,26 +450,29 @@ async def _run_turn(conv: Conversation, user_text: str, llm: ChatLLM) -> AsyncIt
             if not calls:
                 if rnd < MAX_TOOL_ROUNDS - 1 and not nudged:
                     made_up = ungrounded(final_text, conv.grounded_times)
-                    nudge = (
-                        _nudge_ungrounded(made_up)
+                    unsourced = bool(_FACT_QUESTION.search(user_text)) and "get_clinic_info" not in called
+                    reason, nudge = (
+                        ("ungrounded_times", _nudge_ungrounded(made_up))
                         if made_up
-                        else NUDGE
+                        else ("unsourced_fact", NUDGE_FACTS)
+                        if unsourced
+                        else ("announced_action", NUDGE)
                         if _ANNOUNCED_ACTION.search(final_text)
-                        else None
+                        else (None, None)
                     )
                     if nudge:
                         nudged = True
-                        timings["nudged"] = "ungrounded_times" if made_up else "announced_action"
-                        logger.info(f"nudge: {timings['nudged']} {sorted(made_up)}")
+                        timings["nudged"] = reason
+                        logger.info(f"nudge: {reason} {sorted(made_up)}")
                         conv.messages.append({"role": "user", "content": nudge})
-                        if made_up and final_text.strip():
+                        if reason != "announced_action" and final_text.strip():
                             # Already streamed: tell the UI to strike it, and keep it out of the transcript.
                             if spoken and spoken[-1] == final_text.strip():
                                 spoken.pop()
                             yield {
                                 "type": "retract",
                                 "text": final_text,
-                                "reason": "ungrounded_times",
+                                "reason": reason,
                                 "times": sorted(made_up),
                             }
                         continue

@@ -24,7 +24,8 @@ from loguru import logger
 from postgrest.exceptions import APIError
 
 from smiledesk.agent.clinic import ApptType, Clinic, Dentist, load_clinic
-from smiledesk.clock import clinic_tz, fmt_day, fmt_slot, fmt_start, now, parse_local_datetime, pg_dow
+from smiledesk.agent.grounding import spoken_times
+from smiledesk.clock import clinic_tz, fmt_day, fmt_slot, fmt_start, fmt_time, now, parse_local_datetime, pg_dow
 from smiledesk.db import get_db, row, rows
 from smiledesk.providers.embeddings import embed_query
 
@@ -44,6 +45,9 @@ class ToolContext:
     allowed_phones: set[str] = field(default_factory=set)
     # Slots check_availability actually returned: (start "YYYY-MM-DDTHH:MM", dentist key). Bookings must use one.
     offered: set[tuple[str, str]] = field(default_factory=set)
+    # Pearl's last message to the caller before the current turn (set by the chat loop and the voice pipeline).
+    # Booking/rescheduling needs it to be a confirmation question naming that slot. None = not tracked: guard off.
+    last_assistant_text: str | None = None
     # handle ("P1", "A3") ↔ UUID, per conversation
     _by_handle: dict[str, str] = field(default_factory=dict)
     _by_uuid: dict[str, str] = field(default_factory=dict)
@@ -71,6 +75,44 @@ class ToolContext:
 
 
 _UUID = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
+def assistant_text_before_last_user(messages: list[Any]) -> str:
+    """What Pearl said just before the caller's latest message ("" if nothing). Works on chat and Pipecat history."""
+    seen_user = False
+    for m in reversed(messages):
+        if not isinstance(m, dict):
+            continue
+        role, content = m.get("role"), m.get("content")
+        if role == "user" and not seen_user:
+            seen_user = True
+        elif role == "user":
+            return ""
+        elif role == "assistant" and seen_user and isinstance(content, str) and content.strip():
+            return content
+    return ""
+
+
+def _unconfirmed(ctx: ToolContext, when: datetime) -> ToolResult | None:
+    """A write needs the caller's yes to a question that named exactly this slot's time.
+
+    Offering three options and hearing "the first one" is a choice, not a confirmation: small models book right
+    there. Code, not the prompt, makes them ask "Shall I book … at 9 AM?" first.
+    """
+    prev = ctx.last_assistant_text
+    if prev is None:
+        return None
+    # The question Pearl ended on must name exactly this time (options listed before it are fine).
+    # "Dr. Priya" isn't the end of a sentence.
+    text = re.sub(r"\b(Dr|Mr|Mrs|Ms|St)\.", r"\1", prev)
+    questions = re.findall(r"[^.?!\n]*\?", text)
+    if questions and spoken_times(questions[-1]) == {when.strftime("%H:%M")}:
+        return None
+    return err(
+        "Not confirmed yet: the caller hasn't said yes to this exact slot.",
+        f"Don't book yet and don't say it's booked. Ask one question naming who, the visit, the dentist, "
+        f'{fmt_day(when)} and {fmt_time(when)} ("Shall I book …?"), then wait for their yes.',
+    )
 
 
 def err(error: str, hint: str = "") -> ToolResult:
@@ -536,8 +578,9 @@ def lookup_patient(ctx: ToolContext, phone: str) -> ToolResult:
         "found": True,
         "phone": e164,
         "patients": patients,
-        "next_step": "If the caller already said what visit and which day they want, call check_availability now "
-        "(don't ask for a time of day first). Otherwise ask what they need.",
+        "next_step": "If the caller asked a question about the clinic (prices, insurance, parking, hours, payment, "
+        "policies), call get_clinic_info now. If they said what visit and which day they want, call check_availability "
+        "now (don't ask for a time of day first). Otherwise ask what they need.",
     }
     if len(patients) > 1:
         out["note"] = (
@@ -734,6 +777,8 @@ def book_appointment(
             "That time wasn't returned by check_availability in this conversation.",
             "Call check_availability for that day, offer the real times, and confirm with the patient before booking.",
         )
+    if bad := _unconfirmed(ctx, when):
+        return bad
     params = {
         "p_patient_id": pid,
         "p_dentist_id": dentist.id,
@@ -800,6 +845,8 @@ def reschedule_appointment(
             "That time wasn't returned by check_availability in this conversation.",
             "Call check_availability for the new day, offer the real times, and confirm before rescheduling.",
         )
+    if bad := _unconfirmed(ctx, when):
+        return bad
     try:
         new = row(
             get_db()
