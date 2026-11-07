@@ -1,0 +1,61 @@
+[project]
+name = "smiledesk"
+version = "0.1.0"
+description = "SmileDesk agent: AI front desk for Pearl Dental Care (FastAPI + Pipecat)"
+authors = [
+    { name = "Gladwin TM", email = "gladwintm04@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.162.0",
+    "httpx>=0.28.1",
+    "loguru>=0.7.3",
+    "openai>=3.46.0",
+    "pipecat-ai[kokoro,mlx-whisper,webrtc]==1.15.0",
+    "pydantic-settings>=2.16.2",
+    "supabase>=2.34.1",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.optional-dependencies]
+fastembed = [
+    "fastembed>=0.9.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.19,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1.post1",
+    "ruff>=0.17.4",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC"]
+ignore = ["RUF001", "RUF002", "RUF003"]  # en dashes / unicode in prose are intentional
+
+[tool.pyright]
+include = ["src", "scripts", "tests"]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "src"]  # explicit: macOS can flag .venv .pth files hidden, which Python then skips
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning:supabase.*"]  # supabase-py internals
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = ["db: needs local Supabase (make db-start)", "ollama: needs a running Ollama with the embed model"]

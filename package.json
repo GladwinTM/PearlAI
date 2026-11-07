@@ -1,0 +1,11 @@
+{
+  "name": "smiledesk-root",
+  "private": true,
+  "description": "Repo-level tooling (Supabase CLI). The web app lives in ./web, the agent in ./agent.",
+  "scripts": {
+    "supabase": "supabase"
+  },
+  "devDependencies": {
+    "supabase": "^3.0.0"
+  }
+}
