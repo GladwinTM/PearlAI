@@ -3,13 +3,14 @@ export interface Persona {
   id: string;
   label: string;
   description: string;
+  initials: string;
 }
 
 export const PERSONAS: Persona[] = [
-  { id: "ravi", label: "Ravi", description: "Existing patient" },
-  { id: "anjali", label: "Anjali", description: "New patient" },
-  { id: "ravi_meena", label: "Ravi for Meena", description: "Booking for his daughter Meena" },
-  { id: "new", label: "Someone new", description: "No caller ID, never visited" },
+  { id: "ravi", label: "Ravi", description: "Existing patient", initials: "RK" },
+  { id: "anjali", label: "Anjali", description: "New patient", initials: "AN" },
+  { id: "ravi_meena", label: "Ravi for Meena", description: "Booking for his daughter", initials: "RM" },
+  { id: "new", label: "Someone new", description: "No caller ID", initials: "?" },
 ];
 
 export const TRY_PROMPTS = [

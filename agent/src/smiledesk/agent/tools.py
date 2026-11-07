@@ -680,6 +680,7 @@ def _appt_summary(ctx: ToolContext, a: dict[str, Any], c: Clinic) -> dict[str, A
         "type": a["appointment_type_id"],
         "dentist": dent.full_name if dent else a["dentist_id"],
         "when": fmt_slot(when),
+        "start": fmt_start(when),
         "duration_minutes": typ.duration_minutes if typ else None,
         "status": a["status"],
     }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -67,9 +68,15 @@ async def offer(raw: Request) -> dict[str, Any]:
     persona = body.get("persona") if s.demo_mode else None
     if persona and persona not in PERSONAS:
         raise HTTPException(400, f"Unknown persona '{persona}'.")
+    conversation_id = body.get("conversation_id")
+    if conversation_id is not None:
+        try:
+            conversation_id = str(uuid.UUID(str(conversation_id)))
+        except ValueError as e:
+            raise HTTPException(400, "Invalid conversation_id.") from e
 
     async def on_connection(connection: SmallWebRTCConnection) -> None:
-        task = asyncio.create_task(run_voice_session(connection, persona))
+        task = asyncio.create_task(run_voice_session(connection, persona, conversation_id))
         _tasks.add(task)
 
         def _done(t: asyncio.Task[None]) -> None:

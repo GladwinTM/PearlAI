@@ -1,24 +1,39 @@
 import Link from "next/link";
 
-import { HealthPanel } from "@/components/health-panel";
+import { BootGate } from "@/components/boot/boot-gate";
+import { Hero } from "@/components/landing/hero";
+import { HowItWorks } from "@/components/landing/how-it-works";
+import { LocalBadges } from "@/components/landing/local-badges";
+import { SiteHeader } from "@/components/site-header";
+import { Button } from "@/components/ui/button";
+import { GITHUB_URL } from "@/lib/config";
 
-// M1 placeholder: proves web → agent API → providers end to end. The real landing page arrives in M4.
 export default function Home() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col items-start gap-6 px-4 py-16">
-      <h1 className="text-4xl font-semibold tracking-tight">SmileDesk</h1>
-      <p className="text-lg text-slate-600 dark:text-slate-300">
-        AI front desk for Pearl Dental Care. Foundations build: service status.
-      </p>
-      <HealthPanel />
-      <div className="flex gap-3">
-        <Link href="/voice" className="rounded bg-teal-700 px-4 py-2 font-medium text-white">
-          🎙 Talk to Pearl
-        </Link>
-        <Link href="/chat" className="rounded border border-teal-700 px-4 py-2 font-medium">
-          Chat with Pearl
-        </Link>
-      </div>
-    </main>
+    <BootGate>
+      <SiteHeader>
+        <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
+          <a href="#how">How it works</a>
+        </Button>
+        {GITHUB_URL && (
+          <Button asChild variant="ghost" size="sm">
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+              GitHub
+            </a>
+          </Button>
+        )}
+        <Button asChild size="sm" className="rounded-full">
+          <Link href="/talk">Try it</Link>
+        </Button>
+      </SiteHeader>
+      <main className="flex-1 bg-pearl-glow">
+        <Hero />
+        <HowItWorks />
+        <LocalBadges />
+      </main>
+      <footer className="border-t py-6 text-center text-sm text-muted-foreground">
+        SmileDesk is a portfolio demo. Pearl Dental Care, its dentists and patients are fictional.
+      </footer>
+    </BootGate>
   );
 }

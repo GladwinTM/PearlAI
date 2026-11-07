@@ -34,6 +34,33 @@ async def strip_for_speech(text: str, _text_type: Any = None) -> str:
     return re.sub(r"[ \t]{2,}", " ", out)
 
 
+# "P.M." keeps its final dot only when written dotted, so a sentence-ending "PM." keeps its full stop.
+_CLOCK = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)(?![\d:])(\s*([AaPp])(\.)?\s?[Mm](?(5)\.)(?![A-Za-z]))?")
+
+
+def _say_clock(m: re.Match[str]) -> str:
+    hour, minute, meridiem = int(m.group(1)), m.group(2), m.group(4)
+    if meridiem is None and hour > 12:  # 24-hour "14:00" -> "2 PM"
+        hour, meridiem = hour - 12, "p"
+    elif meridiem is None and hour == 0:
+        hour, meridiem = 12, "a"
+    if minute == "00":
+        spoken = f"{hour}" if meridiem else f"{hour} o'clock"
+    elif minute.startswith("0"):
+        spoken = f"{hour} oh {minute[1]}"
+    else:
+        spoken = f"{hour} {minute}"
+    return f"{spoken} {meridiem.upper()}M" if meridiem else spoken
+
+
+async def speakable_times(text: str, _text_type: Any = None) -> str:
+    """TTS-only: Kokoro reads "12:00 PM" as "twelve zero zero PM". Captions and context keep "12:00 PM".
+
+    "12:00 PM" -> "12 PM", "9:05 am" -> "9 oh 5 AM", "2:30 PM" -> "2 30 PM", "14:00" -> "2 PM".
+    """
+    return _CLOCK.sub(_say_clock, text)
+
+
 def is_action_claim(sentence: str) -> bool:
     return bool(_CLAIM.search(sentence)) and not _NOT_A_CLAIM.search(sentence)
 

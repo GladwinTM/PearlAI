@@ -44,6 +44,7 @@ async def chat(req: ChatRequest) -> StreamingResponse:
     if persona and persona not in PERSONAS:
         raise HTTPException(400, f"Unknown persona '{persona}'.")
     conv = await store.get_or_create(req.conversation_id, persona=persona, channel="chat")
+    conv.ctx.channel = "chat"  # the same conversation may have started as a voice call
     if persona and not conv.persona:
         conv.persona = persona
 

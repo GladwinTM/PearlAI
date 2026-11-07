@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from smiledesk.voice.text import SAFE_REPLACEMENT, ClaimGuard, is_action_claim, strip_for_speech
+from smiledesk.voice.text import SAFE_REPLACEMENT, ClaimGuard, is_action_claim, speakable_times, strip_for_speech
 
 
 async def test_strip_for_speech() -> None:
@@ -85,3 +85,34 @@ async def test_first_clause_aggregator() -> None:
         "Sure, a cleaning costs ₹1,200 at our clinic.",
         "Anything else?",
     ]
+
+
+@pytest.mark.parametrize(
+    ("text", "spoken"),
+    [
+        ("I have 12:00 PM or 12:30 PM.", "I have 12 PM or 12 30 PM."),
+        ("How about 9:05 am?", "How about 9 oh 5 AM?"),
+        ("Is 2:00pm okay", "Is 2 PM okay"),
+        ("We open at 9:00.", "We open at 9 o'clock."),
+        ("at 14:00 tomorrow", "at 2 PM tomorrow"),
+        ("at 9:30 p.m. today", "at 9 30 PM today"),
+        ("Call 98765 43210", "Call 98765 43210"),  # phone numbers untouched
+        ("Room 3:2 ratio 12:345", "Room 3:2 ratio 12:345"),  # not clock times
+    ],
+)
+async def test_speakable_times(text: str, spoken: str) -> None:
+    assert await speakable_times(text) == spoken
+
+
+def test_kokoro_service_registers_time_transform() -> None:
+    from smiledesk.providers.tts import KokoroTTS
+
+    svc = KokoroTTS("af_heart", "kokoro").pipecat_service()
+    assert any(fn is speakable_times for _, fn in svc._text_transforms)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_kokoro_tolerates_slow_local_synthesis() -> None:
+    from smiledesk.providers.tts import LOCAL_TTS_STALL_S, KokoroTTS
+
+    svc = KokoroTTS("af_heart", "kokoro").pipecat_service()
+    assert svc._stop_frame_timeout_s == LOCAL_TTS_STALL_S > 3.0  # pyright: ignore[reportPrivateUsage]

@@ -51,6 +51,9 @@ def install_shared_kokoro() -> None:
     setattr(kokoro_module, "Kokoro", _shared_kokoro)  # noqa: B010 - deliberate module patch
 
 
+LOCAL_TTS_STALL_S = 10.0
+
+
 class KokoroTTS:
     is_local = True
 
@@ -90,8 +93,18 @@ class KokoroTTS:
     def pipecat_service(self) -> Any:
         from pipecat.services.kokoro.tts import KokoroTTSService
 
+        from smiledesk.voice.text import speakable_times
+
         install_shared_kokoro()
-        return KokoroTTSService(settings=KokoroTTSService.Settings(voice=self.voice))
+        # TTS-level transforms change only what is synthesized; captions and the LLM context keep "12:00 PM".
+        return KokoroTTSService(
+            settings=KokoroTTSService.Settings(voice=self.voice),
+            text_transforms=[("*", speakable_times)],
+            # Kokoro synthesizes a whole sentence before the first byte. On a loaded laptop that can exceed Pipecat's
+            # 3 s default, which reports "completed with no audio" and, three times in a row, marks the voice
+            # unusable for the rest of the call. Slow is not broken: wait longer.
+            stop_frame_timeout_s=LOCAL_TTS_STALL_S,
+        )
 
 
 _tts: TTSProvider | None = None

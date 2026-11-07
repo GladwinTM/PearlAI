@@ -1,0 +1,260 @@
+"use client";
+
+import { CalendarDays, MessageSquare, Mic, PanelRightClose, PanelRightOpen, RotateCcw, ScanSearch } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { toast } from "sonner";
+
+import { useHealth } from "@/components/boot/health-provider";
+import { WeekCalendar } from "@/components/calendar/week-calendar";
+import { Inspector } from "@/components/inspector/inspector";
+import { SiteHeader } from "@/components/site-header";
+import { Button } from "@/components/ui/button";
+import { resetDemo } from "@/lib/chat";
+import { initialTalk, talkReducer } from "@/lib/talk";
+import { useChat } from "@/lib/use-chat";
+import { usePersona } from "@/lib/use-persona";
+import { useVoice } from "@/lib/use-voice";
+import { cn } from "@/lib/utils";
+
+import { Composer } from "./composer";
+import { PersonaSwitcher } from "./persona-switcher";
+import { Transcript } from "./transcript";
+import { TryChips } from "./try-chips";
+import { VoiceStage } from "./voice-stage";
+
+type Mode = "voice" | "chat";
+type MobilePane = "talk" | "calendar" | "inspector";
+
+const WRITE_TOOLS = new Set(["book_appointment", "reschedule_appointment", "cancel_appointment"]);
+
+export function TalkApp() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const { health } = useHealth();
+  const [persona, setPersona] = usePersona();
+  const [state, dispatch] = useReducer(talkReducer, undefined, initialTalk);
+  const [mode, setMode] = useState<Mode>(params.get("mode") === "chat" ? "chat" : "voice");
+  const [explaining, setExplaining] = useState(params.get("mode") === "voice");
+  const [suggestion, setSuggestion] = useState<string | null>(params.get("mode") === "chat" ? null : params.get("prompt"));
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [pane, setPane] = useState<MobilePane>("talk");
+  const [calendarKey, setCalendarKey] = useState(0);
+  const [focusDate, setFocusDate] = useState<string | null>(null);
+  const [recentActivity, setRecentActivity] = useState(0);
+
+  const chat = useChat({ dispatch, persona, conversationId: state.conversationId });
+  // Refs are pulled out by name so the React Compiler can tell them apart from render values.
+  const { audioRef, localLevel, remoteLevel, ...voice } = useVoice({ dispatch, persona, conversationId: state.conversationId });
+  const live = voice.status === "live" || voice.status === "connecting";
+
+  // A "things to try" chip clicked on the landing page arrives as ?prompt=…: sent once in chat, a suggestion in voice.
+  const sentInitial = useRef(false);
+  useEffect(() => {
+    const prompt = params.get("prompt");
+    if (!prompt || sentInitial.current) return;
+    sentInitial.current = true;
+    if (mode === "chat") void chat.send(prompt);
+    router.replace(`/talk?mode=${mode}`, { scroll: false });
+  }, [params, mode, chat, router]);
+
+  // Outcomes → toast, calendar refresh and jump to the booked week.
+  const seen = useRef(0);
+  useEffect(() => {
+    const fresh = state.timeline.slice(seen.current);
+    seen.current = state.timeline.length;
+    for (const it of fresh) {
+      if (it.kind === "outcome") toast.success(it.title);
+      if (it.kind === "safety") toast.warning("Urgent symptoms detected: Pearl is escalating to the clinic team.");
+      if (it.kind === "tool_result" && it.ok && it.tool && WRITE_TOOLS.has(it.tool)) {
+        setCalendarKey((k) => k + 1);
+        const start = (it.json as { start?: string } | undefined)?.start;
+        if (start) setFocusDate(start.slice(0, 10));
+      }
+    }
+    if (fresh.length) setRecentActivity(Date.now());
+  }, [state.timeline]);
+
+  // Poll the calendar fast while something is happening (a call, a reply in flight, or activity in the last 30 s).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(t);
+  }, []);
+  const calendarLive = live || chat.busy || now - recentActivity < 30000;
+
+  const newConversation = useCallback(() => {
+    dispatch({ type: "reset" });
+    setFocusDate(null);
+  }, []);
+
+  const onPersona = (id: string) => {
+    if (id === persona) return;
+    setPersona(id);
+    newConversation();
+  };
+
+  const switchMode = async (next: Mode) => {
+    if (next === mode) return;
+    if (next === "chat" && voice.status === "live") await voice.end();
+    setMode(next);
+    setSuggestion(null);
+    setExplaining(false);
+    if (state.conversationId) dispatch({ type: "info", channel: next, text: `Switched to ${next}: same conversation` });
+  };
+
+  const onChip = (prompt: string) => {
+    if (mode === "chat") void chat.send(prompt);
+    else setSuggestion(prompt);
+  };
+
+  const onReset = async () => {
+    try {
+      if (voice.status === "live") await voice.end();
+      await resetDemo();
+      newConversation();
+      setCalendarKey((k) => k + 1);
+      toast.success("Demo reset: calendar fixtures rebuilt and test bookings cleared.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  const empty = (
+    <div className="mx-auto flex max-w-lg flex-col gap-4 py-6">
+      <p className="text-center text-sm text-muted-foreground">
+        {mode === "chat"
+          ? "Ask Pearl to book, move or cancel an appointment, or ask about the clinic."
+          : "Captions appear here while you talk."}
+      </p>
+      {mode === "chat" && <TryChips onPick={onChip} disabled={chat.busy} />}
+    </div>
+  );
+
+  return (
+    <div className="flex h-dvh flex-col">
+      <SiteHeader>
+        {health?.demo_mode && (
+          <Button variant="ghost" size="sm" onClick={onReset} title="Rebuild demo fixtures and clear test bookings">
+            <RotateCcw /> <span className="hidden sm:inline">Reset demo</span>
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden lg:inline-flex"
+          onClick={() => setInspectorOpen((o) => !o)}
+          aria-pressed={inspectorOpen}
+          aria-label={inspectorOpen ? "Hide the Inspector" : "Show the Inspector"}
+        >
+          {inspectorOpen ? <PanelRightClose /> : <PanelRightOpen />}
+        </Button>
+      </SiteHeader>
+
+      {/* mobile pane switcher */}
+      <nav aria-label="Panels" className="flex gap-1 border-b px-3 py-1.5 lg:hidden">
+        {(
+          [
+            ["talk", "Talk", mode === "voice" ? Mic : MessageSquare],
+            ["calendar", "Calendar", CalendarDays],
+            ["inspector", "How it works", ScanSearch],
+          ] as const
+        ).map(([id, label, Icon]) => (
+          <Button key={id} variant={pane === id ? "secondary" : "ghost"} size="sm" aria-pressed={pane === id} onClick={() => setPane(id)}>
+            <Icon /> {label}
+          </Button>
+        ))}
+      </nav>
+
+      <main
+        className={cn(
+          "mx-auto grid min-h-0 w-full max-w-[1600px] flex-1 grid-cols-1 gap-4 p-3 lg:p-4",
+          inspectorOpen ? "lg:grid-cols-[minmax(300px,340px)_minmax(0,1fr)_minmax(320px,400px)]" : "lg:grid-cols-[minmax(300px,340px)_minmax(0,1fr)]",
+        )}
+      >
+        <aside className={cn("min-h-0 overflow-y-auto", pane === "calendar" ? "block" : "hidden", "lg:block")}>
+          <WeekCalendar live={calendarLive} refreshKey={calendarKey} focusDate={focusDate} />
+        </aside>
+
+        <section aria-label="Conversation with Pearl" className={cn("min-h-0 flex-col gap-3", pane === "talk" ? "flex" : "hidden", "lg:flex")}>
+          <h1 className="sr-only">Talk to Pearl</h1>
+          <div className="flex items-center gap-2">
+            <PersonaSwitcher value={persona} onChange={onPersona} disabled={live || chat.busy} compact className="min-w-0 flex-1" />
+            <div role="tablist" aria-label="Voice or chat" className="flex shrink-0 rounded-full border bg-card p-0.5">
+              {(["voice", "chat"] as const).map((m) => (
+                <button
+                  key={m}
+                  role="tab"
+                  type="button"
+                  aria-selected={mode === m}
+                  data-testid={`mode-${m}`}
+                  onClick={() => void switchMode(m)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm transition-colors",
+                    mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {m === "voice" ? <Mic className="size-3.5" aria-hidden /> : <MessageSquare className="size-3.5" aria-hidden />}
+                  {m === "voice" ? "Voice" : "Chat"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border bg-card/40 p-3 bg-pearl-glow">
+            {mode === "voice" && (
+              <div className="shrink-0 py-2">
+                <VoiceStage
+                  status={voice.status}
+                  orb={voice.orb}
+                  level={voice.orb === "speaking" ? remoteLevel : localLevel}
+                  seconds={voice.seconds}
+                  maxSeconds={voice.maxSeconds}
+                  explaining={explaining}
+                  error={voice.error}
+                  audioBlocked={voice.audioBlocked}
+                  suggestion={suggestion}
+                  onExplain={() => setExplaining(true)}
+                  onCancelExplain={() => setExplaining(false)}
+                  onStart={() => {
+                    setExplaining(false);
+                    void voice.start();
+                  }}
+                  onEnd={() => void voice.end()}
+                  onEnableAudio={voice.enableAudio}
+                  onSwitchToChat={() => void switchMode("chat")}
+                  onDismissSuggestion={() => setSuggestion(null)}
+                />
+              </div>
+            )}
+            <Transcript messages={state.messages} empty={empty} className="flex-1" />
+            {mode === "voice" && !live && state.messages.length === 0 && (
+              <TryChips onPick={onChip} label="Things to try saying" className="mt-2" />
+            )}
+            {mode === "chat" && (
+              <div className="mt-2 shrink-0 space-y-2">
+                {state.messages.length > 0 && (
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-xs text-muted-foreground">Things to try</summary>
+                    <TryChips onPick={onChip} disabled={chat.busy} label="" className="mt-2" />
+                  </details>
+                )}
+                <Composer onSend={(t) => void chat.send(t)} busy={chat.busy} />
+              </div>
+            )}
+          </div>
+          {/* Pearl's voice; captions above are the accessible alternative. */}
+          <audio ref={audioRef} autoPlay className="hidden" />
+        </section>
+
+        <aside
+          aria-label="Inspector"
+          className={cn("min-h-0 flex-col", pane === "inspector" ? "flex" : "hidden", inspectorOpen ? "lg:flex" : "lg:hidden")}
+        >
+          <h2 className="mb-2 text-sm font-semibold">See how it works</h2>
+          <Inspector timeline={state.timeline} latencies={state.latencies} className="flex-1" />
+        </aside>
+      </main>
+    </div>
+  );
+}

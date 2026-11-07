@@ -29,8 +29,9 @@ export function createVoiceClient(config: VoiceConfig, callbacks: Partial<RTVIEv
   return new PipecatClient({ transport, enableMic: true, enableCam: false, callbacks });
 }
 
-export async function connectVoice(client: PipecatClient, persona: string | null): Promise<void> {
+/** Starts the call. With a conversation id, Pearl continues that conversation (e.g. switching from chat to voice). */
+export async function connectVoice(client: PipecatClient, persona: string | null, conversationId: string | null = null): Promise<void> {
   await client.connect({
-    webrtcRequestParams: { endpoint: `${AGENT_URL}/api/offer`, requestData: { persona } },
+    webrtcRequestParams: { endpoint: `${AGENT_URL}/api/offer`, requestData: { persona, conversation_id: conversationId } },
   });
 }

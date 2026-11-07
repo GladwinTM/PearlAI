@@ -42,3 +42,37 @@ def test_write_recency_window() -> None:
     assert s.wrote_recently()  # recap in the next turn is fine
     s.turn_index = 5
     assert not s.wrote_recently()
+
+
+def test_plain_history_keeps_only_portable_messages() -> None:
+    from smiledesk.voice.pipeline import _plain_history  # pyright: ignore[reportPrivateUsage]
+
+    msgs = [
+        {"role": "system", "content": "prompt"},
+        {"role": "user", "content": "hi"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "lookup_patient", "arguments": "{}"}}],
+        },
+        {"role": "tool", "tool_call_id": "c1", "content": "{}"},
+        "not-a-dict",
+    ]
+    out = _plain_history(msgs)
+    assert [m["role"] for m in out] == ["user", "assistant", "tool"]
+    out[0]["content"] = "changed"
+    assert msgs[1]["content"] == "hi"  # a copy, not shared with the live context
+
+
+def test_offer_rejects_a_malformed_conversation_id() -> None:
+    from fastapi.testclient import TestClient
+
+    from smiledesk.main import app
+
+    with TestClient(app) as http:
+        r = http.post(
+            "/api/offer",
+            json={"sdp": "v=0", "type": "offer", "requestData": {"persona": "ravi", "conversation_id": "nope"}},
+        )
+    assert r.status_code == 400
+    assert "conversation_id" in r.json()["detail"]

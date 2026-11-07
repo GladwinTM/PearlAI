@@ -8,7 +8,9 @@ Patients can talk or chat with Pearl to book, reschedule and cancel appointments
 
 Everything runs **locally** on an Apple Silicon Mac. There are no paid APIs and no cloud calls, and every model provider can be swapped through `.env`.
 
-> 🚧 Work in progress. Milestone 1 (foundations) is done. Demo GIF, live link and eval results come with later milestones.
+> 🚧 Work in progress. Milestones 1–4 (foundations, agent + chat, voice, UI) are done. Evals and the demo GIF come with M5.
+
+![Talk page: live calendar, conversation and the Inspector](docs/screenshots/talk-desktop-light.png)
 
 ## Architecture
 
@@ -24,7 +26,7 @@ The browser never talks to Supabase. All data goes through the agent API, so the
 | Layer | Local default | Swap to (env only) |
 |---|---|---|
 | LLM | Ollama `qwen3:8b` (thinking off) | Any OpenAI-compatible API (Groq, OpenRouter, …) |
-| STT | MLX Whisper `large-v3-turbo` | Groq Whisper |
+| STT | MLX Whisper `small.en` | Groq Whisper |
 | TTS | Kokoro-82M (`af_heart`) | (hosted option later) |
 | Embeddings | Ollama `nomic-embed-text` (768-d) | `fastembed` CPU, or any OpenAI-compatible API |
 | DB | Supabase local | Supabase cloud |
@@ -49,6 +51,9 @@ To change providers, copy `.env.example` to `.env` and edit it.
 | `make db-reset` | Re-apply migrations + seed, re-embed the FAQ |
 | `make ingest` | Re-embed the FAQ (after changing the embedding provider) |
 | `make check` | ruff, pyright, pytest, tsc, eslint |
+| `make e2e` | Playwright smoke test in a real browser (landing → persona → chip → tool call in the Inspector) |
+| `make screenshots` | Desktop + mobile, light + dark, into `docs/screenshots/` |
+| `make lighthouse` | Lighthouse accessibility / best practices / SEO for the landing page |
 
 ## Database highlights
 
@@ -99,6 +104,23 @@ Measured on an M5 / 16 GB under heavy memory pressure (Ollama, Docker and an IDE
 | Barge-in: caller starts talking → Pearl silent | ~0.6 s | 0.15–0.65 s |
 
 The bottleneck is the 8B model's generation speed while the machine is swapping. A tool turn needs two LLM rounds.
+
+## The UI
+
+- **Boot screen.** An honest checklist that polls `/api/health` (database, LLM, embeddings, knowledge base, Whisper, Kokoro), with the fix shown if something is down.
+- **Landing.** A canvas "pearl" orb, a persona switcher (each persona carries a caller ID, so nobody types a phone number), and "things to try" chips that open a chat.
+- **`/talk`.** Three panes: a live week calendar, the conversation, and the Inspector.
+  - **Voice and chat are one conversation.** Switch mid-way: the voice call continues the chat (same tool context and history; Pearl says she has the chat in front of her), and chat continues after the call.
+  - **The orb** breathes when idle, follows your mic level while listening, swirls while thinking and follows Pearl's voice while she speaks.
+  - **The Inspector** shows every tool call with its JSON result, guard and safety events, and a stacked latency bar per turn (STT / LLM first token / TTS first byte).
+  - **The calendar** polls every 2 s during a conversation, jumps to the week of a new booking and animates it in. Fixtures are greyed and names are masked.
+- Dark mode follows the system (with a toggle), the layout works on phones (the panes become tabs), `prefers-reduced-motion` is respected, and Lighthouse accessibility on the landing page and `/talk` is 100.
+- In voice, captions show "12:00 PM" but Pearl *says* "twelve PM": a TTS-only transform rewrites clock times, because Kokoro reads "12:00" as "twelve zero zero".
+
+| Light | Dark |
+|---|---|
+| ![Landing, light](docs/screenshots/landing-desktop-light.png) | ![Landing, dark](docs/screenshots/landing-desktop-dark.png) |
+| ![Talk on a phone, light](docs/screenshots/talk-mobile-light.png) | ![Talk on a phone, dark](docs/screenshots/talk-mobile-dark.png) |
 
 ## Repo layout
 

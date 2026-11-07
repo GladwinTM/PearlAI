@@ -9,7 +9,7 @@ SUPABASE := npx --no-install supabase
 LLM_MODEL ?= qwen3:8b
 EMBED_MODEL ?= nomic-embed-text
 
-.PHONY: help setup deps db-start db-stop db-reset db-status models ingest dev agent web check lint typecheck test eval voice-probe
+.PHONY: help setup deps db-start db-stop db-reset db-status models ingest dev agent web check lint typecheck test eval voice-probe e2e screenshots lighthouse
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -71,6 +71,15 @@ check: lint typecheck test ## Everything CI would run
 
 voice-probe: ## Headless voice test: speaks to Pearl over WebRTC and reports real latency (agent must be running)
 	$(AGENT) uv run python scripts/voice_probe.py --persona ravi --barge-in "Hello, good afternoon." "What are your opening hours on Saturday?" "I need a checkup next Wednesday afternoon." "Thanks, how much does a cleaning cost?"
+
+e2e: ## Playwright smoke test in a real browser (agent must be running; starts the web app if needed)
+	cd web && npm run test:e2e
+
+screenshots: ## Desktop + mobile, light + dark screenshots into docs/screenshots
+	cd web && npm run screenshots
+
+lighthouse: ## Lighthouse accessibility/best-practices/SEO for the landing page (web must be running)
+	cd web && npm run lighthouse
 
 eval: ## Run the eval suite (M5)
 	$(AGENT) uv run python -m smiledesk.evals.runner --prompt $${PROMPT_VERSION:-v1}

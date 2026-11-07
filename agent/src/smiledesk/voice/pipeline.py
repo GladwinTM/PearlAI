@@ -40,6 +40,7 @@ from pipecat.transports.base_transport import BaseTransport, TransportParams
 
 from smiledesk.agent import logging as convlog
 from smiledesk.agent.clinic import load_clinic
+from smiledesk.agent.core import store
 from smiledesk.agent.personas import caller_phone_for
 from smiledesk.agent.prompts import render
 from smiledesk.agent.tools import TOOL_SCHEMAS, ToolContext, execute_tool
@@ -52,6 +53,7 @@ from smiledesk.voice.events import LatencyObserver, VoiceGuard, VoiceSession, st
 from smiledesk.voice.text import SAFE_REPLACEMENT, ClaimGuard, FirstClauseAggregator, strip_for_speech
 
 FILLER = "One moment, let me check."
+RESUME_GREETING = "Hi, it's Pearl. I have our chat in front of me, so go ahead."
 WRITE_TOOLS = {"book_appointment", "reschedule_appointment", "cancel_appointment"}
 
 
@@ -101,13 +103,33 @@ def create_llm(s: Settings) -> OpenAILLMService:
 active_sessions: dict[str, VoiceSession] = {}
 
 
-async def run_voice_session(connection: Any, persona: str | None = None) -> None:
-    """Build and run one call. Returns when the call ends (hang-up, time limit or error)."""
+def _plain_history(messages: list[Any]) -> list[dict[str, Any]]:
+    """OpenAI-format user/assistant/tool messages (no system prompt), safe to hand between chat and voice."""
+    out: list[dict[str, Any]] = []
+    for m in messages:
+        if isinstance(m, dict) and m.get("role") in ("user", "assistant", "tool"):
+            out.append(json.loads(json.dumps(m, default=str)))
+    return out
+
+
+async def run_voice_session(connection: Any, persona: str | None = None, conversation_id: str | None = None) -> None:
+    """Build and run one call. Returns when the call ends (hang-up, time limit or error).
+
+    With `conversation_id` the call continues that conversation (e.g. the caller switched from chat to voice): same
+    id, same ToolContext (patient handles, offered slots), and the chat history seeded into the LLM context. When the
+    call ends its turns are written back, so chat can carry on after voice too.
+    """
     s = get_settings()
     session_key = uuid.uuid4().hex
     clinic = await asyncio.to_thread(load_clinic)
-    conversation_id = await asyncio.to_thread(convlog.create_conversation, "voice", s.prompt_version, s.llm_model)
-    ctx = ToolContext(conversation_id=conversation_id, channel="voice")
+    conv = await store.get_or_create(conversation_id, persona=persona, channel="voice")
+    if conv.id is None:  # pragma: no cover - only when logging is off
+        raise RuntimeError("voice sessions need a logged conversation")
+    conversation_id = conv.id
+    resumed = bool(conv.messages)
+    ctx: ToolContext = conv.ctx
+    previous_channel = ctx.channel
+    ctx.channel = "voice"  # bookings made during the call are tagged as voice
     session = VoiceSession(conversation_id=conversation_id, ctx=ctx, vad_stop_secs=s.voice_vad_stop_secs)
     active_sessions[session_key] = session
 
@@ -117,6 +139,7 @@ async def run_voice_session(connection: Any, persona: str | None = None) -> None
     llm = create_llm(s)
 
     messages: list[dict[str, Any]] = [{"role": "system", "content": render(s.prompt_version, clinic, now())}]
+    messages += _plain_history(conv.messages)
     context = LLMContext(messages=messages, tools=tools_schema())  # pyright: ignore[reportArgumentType]
     aggregators = LLMContextAggregatorPair(
         context,
@@ -205,7 +228,8 @@ async def run_voice_session(connection: Any, persona: str | None = None) -> None
         await send({"type": "session", "conversation_id": conversation_id, "max_seconds": s.max_voice_session_seconds,
                     "vad_stop_ms": int(s.voice_vad_stop_secs * 1000), "persona": persona})  # fmt: skip
         phone = caller_phone_for(persona)
-        if phone:
+        if phone and not conv.caller_looked_up:
+            conv.caller_looked_up = True
             ctx.allowed_phones.add(phone)
             call_id = f"auto_{uuid.uuid4().hex[:8]}"
             args = {"phone": phone}
@@ -229,7 +253,7 @@ async def run_voice_session(connection: Any, persona: str | None = None) -> None
                 ]
             )  # pyright: ignore[reportArgumentType]
         # A fixed greeting through TTS: no LLM round, so Pearl speaks within ~1 s of connecting.
-        await worker.queue_frame(TTSSpeakFrame(s.voice_greeting))
+        await worker.queue_frame(TTSSpeakFrame(RESUME_GREETING if resumed else s.voice_greeting))
 
     @transport.event_handler("on_client_disconnected")
     async def _on_disconnected(_transport: Any, _client: Any) -> None:
@@ -254,6 +278,9 @@ async def run_voice_session(connection: Any, persona: str | None = None) -> None
     finally:
         limiter.cancel()
         active_sessions.pop(session_key, None)
+        # Hand the call back to the shared conversation so chat can continue it.
+        conv.messages = _plain_history(context.get_messages())
+        ctx.channel = previous_channel
         med = session.median_voice_to_voice()
         logger.info(
             f"[voice] call ended after {time.monotonic() - t_start:.0f}s; turns={len(session.latencies)} "
