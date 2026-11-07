@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from datetime import date, datetime, time, timedelta
 from typing import Any
@@ -12,6 +13,29 @@ from supabase import Client
 
 from smiledesk.config import get_settings
 from smiledesk.db import rows
+
+# The suite always tests the local stack, whatever the repo's .env points at (e.g. the hosted Supabase + Groq).
+# Environment variables beat .env in pydantic-settings, so these win. Set SMILEDESK_TEST_USE_ENV=1 to opt out.
+if not os.environ.get("SMILEDESK_TEST_USE_ENV"):
+    os.environ.update(
+        {
+            "SUPABASE_URL": "http://127.0.0.1:54321",
+            "SUPABASE_SERVICE_ROLE_KEY": "",  # empty → read from `supabase status`
+            "LLM_BASE_URL": "http://localhost:11434/v1",
+            "LLM_API_KEY": "ollama",
+            "LLM_MODEL": "qwen3:8b",
+            "LLM_REASONING_EFFORT": "none",
+            "JUDGE_BASE_URL": "http://localhost:11434/v1",
+            "JUDGE_API_KEY": "ollama",
+            "JUDGE_MODEL": "qwen3:8b",
+            "STT_PROVIDER": "local_whisper",
+            "STT_MODEL": "small.en",
+            "EMBED_PROVIDER": "ollama",
+            "EMBED_BASE_URL": "http://localhost:11434/v1",
+            "EMBED_MODEL": "nomic-embed-text",
+            "ICE_SERVERS_JSON": "",
+        }
+    )
 
 PRIYA = "11111111-1111-1111-1111-111111111111"
 ARJUN = "22222222-2222-2222-2222-222222222222"
