@@ -7,6 +7,7 @@ so warming up here also pre-downloads them for the M3 voice pipeline.
 from __future__ import annotations
 
 import asyncio
+from functools import lru_cache
 from typing import Any, Protocol
 
 import numpy as np
@@ -26,6 +27,29 @@ class TTSProvider(Protocol):
         """Returns (mono float32 samples, sample_rate)."""
         ...
 
+    def pipecat_service(self) -> Any:
+        """A Pipecat TTS service for the voice pipeline."""
+        ...
+
+
+@lru_cache(maxsize=2)
+def _shared_kokoro(model_path: str, voices_path: str) -> Any:
+    """One Kokoro instance per process (≈300 MB), shared by warmup and every voice session."""
+    from kokoro_onnx import Kokoro
+
+    return Kokoro(model_path, voices_path)
+
+
+def install_shared_kokoro() -> None:
+    """Make Pipecat's KokoroTTSService reuse the shared instance instead of loading a copy per call.
+
+    Pipecat constructs `Kokoro(model, voices)` inside the service's __init__; swapping the module-level name
+    for the cached factory is the least invasive hook (no subclassing of private internals).
+    """
+    import pipecat.services.kokoro.tts as kokoro_module
+
+    setattr(kokoro_module, "Kokoro", _shared_kokoro)  # noqa: B010 - deliberate module patch
+
 
 class KokoroTTS:
     is_local = True
@@ -38,7 +62,6 @@ class KokoroTTS:
 
     def _load(self) -> Any:
         if self._kokoro is None:
-            from kokoro_onnx import Kokoro
             from pipecat.services.kokoro.tts import (  # reuse Pipecat's download + cache location
                 KOKORO_CACHE_DIR,
                 _ensure_model_files,  # pyright: ignore[reportPrivateUsage]
@@ -48,7 +71,7 @@ class KokoroTTS:
             voices_path = KOKORO_CACHE_DIR / "voices-v1.0.bin"
             KOKORO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
             _ensure_model_files(model_path, voices_path)
-            kokoro = Kokoro(str(model_path), str(voices_path))
+            kokoro = _shared_kokoro(str(model_path), str(voices_path))
             if self.voice not in kokoro.voices:
                 raise ValueError(f"TTS_VOICE '{self.voice}' is not a Kokoro voice")
             self._kokoro = kokoro
@@ -63,6 +86,12 @@ class KokoroTTS:
             return samples, sr
 
         return await asyncio.to_thread(_run)
+
+    def pipecat_service(self) -> Any:
+        from pipecat.services.kokoro.tts import KokoroTTSService
+
+        install_shared_kokoro()
+        return KokoroTTSService(settings=KokoroTTSService.Settings(voice=self.voice))
 
 
 _tts: TTSProvider | None = None

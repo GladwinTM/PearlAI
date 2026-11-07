@@ -11,9 +11,14 @@ export default function Home() {
         AI front desk for Pearl Dental Care. Foundations build: service status.
       </p>
       <HealthPanel />
-      <Link href="/chat" className="rounded bg-teal-700 px-4 py-2 font-medium text-white">
-        Chat with Pearl →
-      </Link>
+      <div className="flex gap-3">
+        <Link href="/voice" className="rounded bg-teal-700 px-4 py-2 font-medium text-white">
+          🎙 Talk to Pearl
+        </Link>
+        <Link href="/chat" className="rounded border border-teal-700 px-4 py-2 font-medium">
+          Chat with Pearl
+        </Link>
+      </div>
     </main>
   );
 }

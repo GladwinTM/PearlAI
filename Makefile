@@ -9,7 +9,7 @@ SUPABASE := npx --no-install supabase
 LLM_MODEL ?= qwen3:8b
 EMBED_MODEL ?= nomic-embed-text
 
-.PHONY: help setup deps db-start db-stop db-reset db-status models ingest dev agent web check lint typecheck test eval
+.PHONY: help setup deps db-start db-stop db-reset db-status models ingest dev agent web check lint typecheck test eval voice-probe
 
 help:
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -68,6 +68,9 @@ test: ## Run the Python test suite (needs local Supabase + Ollama for db/ollama-
 	$(AGENT) uv run pytest -q
 
 check: lint typecheck test ## Everything CI would run
+
+voice-probe: ## Headless voice test: speaks to Pearl over WebRTC and reports real latency (agent must be running)
+	$(AGENT) uv run python scripts/voice_probe.py --persona ravi --barge-in "Hello, good afternoon." "What are your opening hours on Saturday?" "I need a checkup next Wednesday afternoon." "Thanks, how much does a cleaning cost?"
 
 eval: ## Run the eval suite (M5)
 	$(AGENT) uv run python -m smiledesk.evals.runner --prompt $${PROMPT_VERSION:-v1}

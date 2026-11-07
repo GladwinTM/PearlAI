@@ -62,7 +62,10 @@ class Settings(BaseSettings):
 
     # ── Speech-to-text
     stt_provider: Literal["local_whisper", "groq"] = "local_whisper"
-    stt_model: str = "large-v3-turbo"
+    # small.en: ~130 ms per 3 s clip on M-series vs ~400 ms for large-v3-turbo, and ~1.2 GB less memory, which
+    # matters on a 16 GB Mac also running an 8B LLM. Same transcripts on our test phrases. Set large-v3-turbo if you
+    # have the headroom.
+    stt_model: str = "small.en"
     stt_api_key: SecretStr = SecretStr("")
     stt_base_url: str = "https://api.groq.com/openai/v1"  # used by the groq provider
 
@@ -91,6 +94,11 @@ class Settings(BaseSettings):
     web_origin: str = "http://localhost:3000"
     demo_mode: bool = True
     max_voice_session_seconds: int = 300
+    max_voice_sessions: int = 2  # concurrent calls; local models share one GPU
+    # Silence after which the caller's turn ends. Lower = snappier but cuts callers off mid-pause
+    # (e.g. while reading a phone number). Added on top of the measured voice-to-voice latency.
+    voice_vad_stop_secs: float = 0.5
+    voice_greeting: str = "Hi, this is Pearl at Pearl Dental Care. How can I help you today?"
     warmup_on_startup: bool = True
     rate_limit_per_minute: int = Field(default=60, ge=1)
 

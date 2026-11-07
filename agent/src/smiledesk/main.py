@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from smiledesk.api import calendar, chat, demo, health
+from smiledesk.api import calendar, chat, demo, health, voice
 from smiledesk.config import get_settings
 from smiledesk.warmup import run_warmup
 
@@ -26,6 +26,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
     if task and not task.done():
         task.cancel()
+    await voice.shutdown()
 
 
 def create_app() -> FastAPI:
@@ -35,13 +36,14 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=[o.strip() for o in s.web_origin.split(",") if o.strip()],
         allow_credentials=False,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
         allow_headers=["*"],
     )
     app.include_router(health.router)
     app.include_router(calendar.router)
     app.include_router(demo.router)
     app.include_router(chat.router)
+    app.include_router(voice.router)
     return app
 
 

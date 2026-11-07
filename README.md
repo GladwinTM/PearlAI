@@ -74,6 +74,32 @@ Prompt rules help, but the important guarantees are enforced in code:
 
 Try it from the terminal: `cd agent && uv run python scripts/chat_cli.py --persona ravi`.
 
+## Voice
+
+```
+browser mic ─WebRTC─▶ Whisper (MLX) ─▶ safety guard ─▶ VAD/turns ─▶ qwen3:8b + tools ─▶ claim guard ─▶ Kokoro ─WebRTC─▶ speaker
+```
+
+- **Pipecat** pipeline over SmallWebRTC (peer-to-peer). The transport is created in one factory on each side, so moving to Daily for deployment is a config change.
+- **Same brain as chat.** Voice uses the same prompt, tool schemas and executors (and therefore the same guards).
+- **Voice-specific guards.** Spoken words can't be retracted, so checks run *before* TTS:
+  - Emoji and markdown are stripped.
+  - A sentence that claims "your appointment is booked/cancelled/moved" is replaced with a confirmation question unless a write tool actually succeeded.
+  - The safety backstop escalates on the transcript itself, before the LLM runs.
+- **Latency work.** STT is `small.en` (about 130 ms per utterance; large-v3-turbo takes about 400 ms and 1.2 GB more RAM). The first clause of each reply is sent to TTS at the first comma, so Pearl starts speaking while the LLM is still writing. A filler line covers tool rounds.
+- **Measured, not faked.** Every turn reports STT, LLM first token, TTS first byte and voice-to-voice to the UI. `make voice-probe` runs a headless WebRTC caller that *speaks* to Pearl (Kokoro, different voice) and measures latency at the caller's ear, including barge-in.
+
+Measured on an M5 / 16 GB under heavy memory pressure (Ollama, Docker and an IDE running; 12+ GB swap):
+
+| | Median | Range |
+|---|---|---|
+| Simple turn, end of speech → Pearl audible (server) | **1.8 s** | 1.1–2.9 s |
+| Same, at the caller's ear (+ 0.5 s silence window, network) | ~2.4 s | |
+| Tool turn: "One moment" audible / real answer starts | 2–4 s / 6–9 s | |
+| Barge-in: caller starts talking → Pearl silent | ~0.6 s | 0.15–0.65 s |
+
+The bottleneck is the 8B model's generation speed while the machine is swapping. A tool turn needs two LLM rounds.
+
 ## Repo layout
 
 ```

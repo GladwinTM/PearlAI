@@ -29,6 +29,10 @@ class STTProvider(Protocol):
         """`audio`: mono float32 PCM at 16 kHz in [-1, 1]."""
         ...
 
+    def pipecat_service(self) -> Any:
+        """A Pipecat STT service for the voice pipeline."""
+        ...
+
 
 class LocalWhisperSTT:
     """MLX Whisper. Weights are downloaded from Hugging Face on first load, then cached locally."""
@@ -59,6 +63,15 @@ class LocalWhisperSTT:
 
         return await asyncio.to_thread(_run)
 
+    def pipecat_service(self) -> Any:
+        from pipecat.services.whisper.stt import WhisperSTTServiceMLX
+        from pipecat.transcriptions.language import Language
+
+        # Same model id as warmup, so mlx_whisper's in-process model cache is reused (no second load).
+        return WhisperSTTServiceMLX(
+            settings=WhisperSTTServiceMLX.Settings(model=self.model, language=Language.EN, no_speech_prob=0.6)
+        )
+
 
 class GroqSTT:
     """Hosted Whisper via Groq's OpenAI-compatible audio API (for deployment)."""
@@ -88,6 +101,13 @@ class GroqSTT:
             model=self.model, file=("audio.wav", buf.getvalue()), language="en"
         )
         return resp.text.strip()
+
+    def pipecat_service(self) -> Any:
+        try:
+            from pipecat.services.groq.stt import GroqSTTService  # pyright: ignore[reportMissingImports]
+        except ImportError as e:  # pragma: no cover - optional extra
+            raise RuntimeError('Voice with STT_PROVIDER=groq needs: uv add "pipecat-ai[groq]"') from e
+        return GroqSTTService(api_key=self._api_key, model=self.model)
 
 
 _stt: STTProvider | None = None

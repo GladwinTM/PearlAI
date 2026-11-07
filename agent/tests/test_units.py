@@ -25,7 +25,7 @@ def test_defaults_are_all_local() -> None:
     s = _settings()
     assert s.all_local
     assert running_on(s) == "qwen3:8b · Whisper · Kokoro (all local)"
-    assert s.stt_model_ref == "mlx-community/whisper-large-v3-turbo"
+    assert s.stt_model_ref == "mlx-community/whisper-small.en-mlx"
 
 
 def test_hosted_providers_are_not_local() -> None:
