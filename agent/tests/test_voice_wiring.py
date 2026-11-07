@@ -76,3 +76,22 @@ def test_offer_rejects_a_malformed_conversation_id() -> None:
         )
     assert r.status_code == 400
     assert "conversation_id" in r.json()["detail"]
+
+
+def test_daily_voice_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi.testclient import TestClient
+
+    from smiledesk.api import voice
+    from smiledesk.config import get_settings
+    from smiledesk.main import app
+
+    monkeypatch.setattr(get_settings(), "max_voice_calls_per_day", 2)
+    monkeypatch.setattr(voice, "_calls_by_day", {voice.now().date().isoformat(): 2})
+    with TestClient(app) as http:
+        cfg = http.get("/api/voice/config").json()
+        assert cfg["daily_limit_reached"] is True and "resting" in cfg["resting_message"]
+        r = http.post("/api/offer", json={"sdp": "v=0", "type": "offer", "requestData": {"persona": "ravi"}})
+    assert r.status_code == 429 and "resting" in r.json()["detail"]
+
+    monkeypatch.setattr(get_settings(), "max_voice_calls_per_day", 0)  # 0 = unlimited
+    assert voice.daily_limit_reached() is False

@@ -43,6 +43,7 @@ export function useVoice({ dispatch, persona, conversationId }: Options) {
     setStatus("connecting");
     try {
       const config = await getVoiceConfig();
+      if (config.daily_limit_reached) throw new Error(config.resting_message ?? "Pearl is resting for today. Chat still works!");
       if (config.active_sessions >= config.max_sessions) {
         throw new Error("Pearl is on another call right now. Try again in a minute, or use chat.");
       }

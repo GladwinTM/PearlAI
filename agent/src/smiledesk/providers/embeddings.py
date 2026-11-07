@@ -39,7 +39,7 @@ class OpenAICompatibleEmbedder:
 
 
 class FastEmbedEmbedder:
-    """In-process CPU embeddings (no Ollama needed). Install with `uv sync --extra fastembed`."""
+    """In-process CPU embeddings (no Ollama needed). Model files cache in FASTEMBED_CACHE_PATH."""
 
     def __init__(self, model: str) -> None:
         self.name = "fastembed"
@@ -51,7 +51,7 @@ class FastEmbedEmbedder:
             try:
                 from fastembed import TextEmbedding  # pyright: ignore[reportMissingImports]
             except ImportError as e:  # pragma: no cover - depends on optional extra
-                raise RuntimeError("fastembed is not installed. Run: uv sync --extra fastembed") from e
+                raise RuntimeError("fastembed is not installed. Run: uv sync") from e
             self._model = TextEmbedding(model_name=self.model)
         return self._model
 

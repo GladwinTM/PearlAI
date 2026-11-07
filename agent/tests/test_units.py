@@ -83,3 +83,18 @@ def test_reasoning_effort_is_configurable_per_model() -> None:
     groq = Settings(_env_file=None, llm_base_url="https://api.groq.com/openai/v1", llm_reasoning_effort="low")  # pyright: ignore[reportCallIssue]
     body = llm_extra_body(groq)
     assert body == {"reasoning_effort": "low"}  # no Ollama-only keep_alive for hosted providers
+
+
+def test_client_ip_ignores_spoofable_forwarded_entries() -> None:
+    from starlette.requests import Request
+
+    from smiledesk.ratelimit import client_ip
+
+    def req(headers: dict[str, str]) -> Request:
+        raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
+        return Request({"type": "http", "headers": raw, "client": ("10.0.0.9", 1234)})
+
+    assert client_ip(req({"Fly-Client-IP": "203.0.113.7", "X-Forwarded-For": "1.1.1.1"})) == "203.0.113.7"
+    # The client can prepend anything; only the entry our proxy appended counts.
+    assert client_ip(req({"X-Forwarded-For": "6.6.6.6, 203.0.113.7"})) == "203.0.113.7"
+    assert client_ip(req({})) == "10.0.0.9"

@@ -1,0 +1,20 @@
+# Keeps the free Supabase project awake (/api/health queries the DB) and rebuilds the demo fixtures daily,
+# so "Thursday is full" and the other scenarios stay relative to the current week.
+# Set the repository variable AGENT_URL (Settings → Secrets and variables → Actions → Variables),
+# e.g. https://smiledesk-agent.fly.dev
+name: keepalive
+
+on:
+  schedule:
+    - cron: "30 21 * * *"  # 03:00 IST, when nobody is mid-demo
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    if: ${{ vars.AGENT_URL != '' }}
+    steps:
+      - name: Health (keeps Supabase awake)
+        run: curl -fsS "${{ vars.AGENT_URL }}/api/health" | head -c 300
+      - name: Reset demo fixtures
+        run: curl -fsS -X POST "${{ vars.AGENT_URL }}/api/demo/reset"

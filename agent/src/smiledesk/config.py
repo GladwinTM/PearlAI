@@ -98,6 +98,8 @@ class Settings(BaseSettings):
     demo_mode: bool = True
     max_voice_session_seconds: int = 300
     max_voice_sessions: int = 2  # concurrent calls; local models share one GPU
+    # Voice calls allowed per clinic day (protects free STT/TURN quotas on a public demo). 0 = unlimited.
+    max_voice_calls_per_day: int = Field(default=0, ge=0)
     # Silence after which the caller's turn ends. Lower = snappier but cuts callers off mid-pause
     # (e.g. while reading a phone number). Added on top of the measured voice-to-voice latency.
     voice_vad_stop_secs: float = 0.5

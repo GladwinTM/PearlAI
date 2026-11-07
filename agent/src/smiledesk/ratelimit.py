@@ -34,9 +34,17 @@ _limiter: RateLimiter | None = None
 
 
 def client_ip(request: Request) -> str:
+    """The visitor's IP, as reported by our own proxy (never a value the visitor can choose).
+
+    Fly's proxy sets Fly-Client-IP. Otherwise use the LAST X-Forwarded-For entry (appended by the nearest
+    proxy): the first entries are whatever the client sent, so trusting them would let anyone dodge the limit.
+    """
+    fly = request.headers.get("fly-client-ip")
+    if fly:
+        return fly.strip()
     fwd = request.headers.get("x-forwarded-for")
     if fwd:
-        return fwd.split(",")[0].strip()
+        return fwd.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"
 
 

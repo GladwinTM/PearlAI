@@ -13,6 +13,8 @@ interface VoiceConfig {
   max_session_seconds: number;
   active_sessions: number;
   max_sessions: number;
+  daily_limit_reached?: boolean;
+  resting_message?: string;
 }
 
 export async function getVoiceConfig(): Promise<VoiceConfig> {

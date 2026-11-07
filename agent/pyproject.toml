@@ -12,7 +12,9 @@ dependencies = [
     "httpx>=0.28.1",
     "loguru>=0.7.3",
     "openai>=3.46.0",
-    "pipecat-ai[kokoro,mlx-whisper,webrtc,whisper]==1.15.0",
+    "pipecat-ai[kokoro,webrtc]==1.15.0",
+    # Local speech-to-text (MLX Whisper) is Apple Silicon only; servers use STT_PROVIDER=groq.
+    "pipecat-ai[mlx-whisper,whisper]==1.15.0; sys_platform == 'darwin'",
     "pydantic-settings>=2.16.2",
     "supabase>=2.34.1",
     "uvicorn[standard]>=0.54.0",
