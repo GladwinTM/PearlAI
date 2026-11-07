@@ -15,6 +15,7 @@ interface Line {
   who: "you" | "pearl" | "event";
   text: string;
   final?: boolean;
+  segment?: number;
 }
 
 interface Latency {
@@ -47,6 +48,7 @@ export default function VoicePage() {
   const [seconds, setSeconds] = useState(0);
   const [maxSeconds, setMaxSeconds] = useState(300);
   const [speaking, setSpeaking] = useState<"you" | "pearl" | null>(null);
+  const [audioBlocked, setAudioBlocked] = useState(false);
   const client = useRef<PipecatClient | null>(null);
   const audio = useRef<HTMLAudioElement>(null);
 
@@ -60,6 +62,11 @@ export default function VoicePage() {
 
   function push(line: Line) {
     setLines((ls) => {
+      // bot-output is a progress stream: one segment (sentence) arrives as new → in-progress → completed.
+      if (line.segment != null) {
+        const i = ls.findIndex((l) => l.who === "pearl" && l.segment === line.segment);
+        if (i >= 0) return [...ls.slice(0, i), line, ...ls.slice(i + 1)];
+      }
       const last = ls[ls.length - 1];
       // replace interim user captions with the newer interim/final text
       if (line.who === "you" && last?.who === "you" && last.final === false) return [...ls.slice(0, -1), line];
@@ -79,13 +86,18 @@ export default function VoicePage() {
       setMaxSeconds(config.max_session_seconds);
       const c = createVoiceClient(config, {
         onTrackStarted: (track, participant) => {
-          if (track.kind === "audio" && participant && !participant.local && audio.current) {
-            audio.current.srcObject = new MediaStream([track]);
-            void audio.current.play();
-          }
+          // SmallWebRTC reports Pearl's track with NO participant; only the local mic carries local: true.
+          if (track.kind !== "audio" || participant?.local === true || !audio.current) return;
+          audio.current.srcObject = new MediaStream([track]);
+          audio.current.play().then(
+            () => setAudioBlocked(false),
+            () => setAudioBlocked(true), // autoplay policy: needs one more click
+          );
         },
         onUserTranscript: (d) => push({ who: "you", text: d.text, final: d.final }),
-        onBotOutput: (d) => d.text?.trim() && push({ who: "pearl", text: d.text }),
+        onBotOutput: (d) => {
+          if (d.text?.trim()) push({ who: "pearl", text: d.text, segment: d.segment_id });
+        },
         onUserStartedSpeaking: () => setSpeaking("you"),
         onUserStoppedSpeaking: () => setSpeaking(null),
         onBotStartedSpeaking: () => setSpeaking("pearl"),
@@ -191,6 +203,16 @@ export default function VoicePage() {
               </button>
             </div>
           </div>
+        )}
+
+        {audioBlocked && (
+          <button
+            type="button"
+            className="rounded bg-amber-600 px-4 py-2 font-medium text-white"
+            onClick={() => audio.current?.play().then(() => setAudioBlocked(false))}
+          >
+            🔊 Your browser paused Pearl&apos;s audio. Click to enable sound
+          </button>
         )}
 
         {error && (

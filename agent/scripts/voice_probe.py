@@ -132,6 +132,7 @@ async def main() -> int:
     listener = Listener()
     events: list[dict[str, Any]] = []
     bot = {"speaking": False, "changed": time.perf_counter()}
+    seen_segments: set[Any] = set()
     channel = pc.createDataChannel("rtvi")
 
     @channel.on("open")
@@ -158,7 +159,10 @@ async def main() -> int:
         elif m.get("type") == "user-transcription" and m.get("data", {}).get("final"):
             print(f"    [stt] {m['data']['text']}", flush=True)
         elif m.get("type") == "bot-output" and m.get("data", {}).get("text"):
-            print(f"    [pearl] {m['data']['text']}", flush=True)
+            seg = m["data"].get("segment_id")
+            if seg is None or seg not in seen_segments:  # progress updates repeat a segment
+                seen_segments.add(seg)
+                print(f"    [pearl] {m['data']['text']}", flush=True)
 
     @pc.on("track")
     def _track(track: MediaStreamTrack) -> None:

@@ -94,7 +94,9 @@ class LatencyObserver(BaseObserver):
 
     async def on_push_frame(self, data: FramePushed) -> None:
         frame = data.frame
-        if not data.first_push:
+        # Pipecat broadcasts some frames (e.g. VAD start/stop) both upstream and downstream as separate copies;
+        # count each event once.
+        if not data.first_push or data.direction != FrameDirection.DOWNSTREAM:
             return
         s, m = self.s, self.s.turn_marks
         if isinstance(frame, VADUserStartedSpeakingFrame):
