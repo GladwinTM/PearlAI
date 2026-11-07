@@ -25,7 +25,9 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
 
 
-def sse(event: str, data: Any) -> str:
+def sse(event: str, data: dict[str, Any]) -> str:
+    """One SSE frame. Every payload carries its own `type`, so clients can rely on the data alone."""
+    data = {"type": event, **data}
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
 
 
@@ -47,7 +49,13 @@ async def chat(req: ChatRequest) -> StreamingResponse:
 
     async def events() -> AsyncIterator[str]:
         yield sse(
-            "conversation", {"conversation_id": conv.id, "persona": conv.persona, "prompt_version": conv.prompt_version}
+            "conversation",
+            {
+                "type": "conversation",
+                "conversation_id": conv.id,
+                "persona": conv.persona,
+                "prompt_version": conv.prompt_version,
+            },
         )
         try:
             async for ev in run_turn(conv, req.message.strip()):

@@ -44,12 +44,14 @@ export async function streamChat(req: ChatRequest, onEvent: (e: AgentEvent) => v
     while ((sep = buffer.indexOf("\n\n")) >= 0) {
       const frame = buffer.slice(0, sep);
       buffer = buffer.slice(sep + 2);
-      const data = frame
-        .split("\n")
+      const lines = frame.split("\n");
+      const eventName = lines.find((l) => l.startsWith("event: "))?.slice(7);
+      const data = lines
         .filter((l) => l.startsWith("data: "))
         .map((l) => l.slice(6))
         .join("\n");
-      if (data) onEvent(JSON.parse(data) as AgentEvent);
+      // The SSE `event:` name is authoritative; fall back to it if a payload lacks `type`.
+      if (data) onEvent({ type: eventName, ...JSON.parse(data) } as AgentEvent);
     }
   }
 }
