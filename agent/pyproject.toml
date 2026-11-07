@@ -10,6 +10,7 @@ dependencies = [
     "fastapi>=0.162.0",
     "fastembed>=0.9.1",  # CPU embeddings (EMBED_PROVIDER=fastembed): the hosted default, no extra API
     "httpx>=0.28.1",
+    "httpx2>=2.16.0",  # the OpenAI SDK's HTTP layer; providers/llm.py plugs a fallback transport into it
     "loguru>=0.7.3",
     "openai>=3.46.0",
     "pipecat-ai[kokoro,webrtc]==1.15.0",

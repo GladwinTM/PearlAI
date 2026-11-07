@@ -1,185 +1,122 @@
-# SmileDesk: Deployment Guide (personal accounts)
+# SmileDesk: Deployment (free tier)
 
-The goal is a public link you can put on your resume that **stays up, loads fast, and costs close to nothing**, deployed entirely from **your personal accounts**.
+A public demo link at **$0/month**, from personal accounts only (never a work email or company org).
 
-> Free tiers and limits change often. Check each provider's current pricing page before you sign up. The numbers below are rough, not guarantees.
+| Part | Service (free tier) | Notes |
+|---|---|---|
+| Web app | **Vercel** Hobby | Root directory `web/` |
+| Agent API + voice | **Hugging Face Space** (Docker, CPU basic: 2 vCPU, 16 GB) | Sleeps after ~48 h without visits; the keep-alive workflow pings it daily |
+| Database | **Supabase** free project | Pauses after ~a week idle; same keep-alive ping |
+| LLM | **Groq** free: `openai/gpt-oss-20b`, falling back to `gpt-oss-120b` and `qwen/qwen3.8-27b` | Each model has its own free quota (~8K tokens/min); ~10 model calls/min combined |
+| Speech-to-text | **Groq** Whisper `whisper-large-v3-turbo` | Same Groq key |
+| Text-to-speech, embeddings | Kokoro and fastembed **inside the agent** | No API, no key; models baked into the image |
+| Voice connectivity | **Metered** Open Relay TURN | Needed: the Space can't take direct WebRTC traffic |
+
+> Free tiers change often. If a quota disappears, every provider is swappable with env variables only.
+> Expect pauses of 10–30 s when several people use Pearl at once: that's the free LLM quota, not a bug.
 
 ---
 
-## 1. Personal identity first (do this before the first commit)
+## 0. Before you start
 
-Use **one personal email** (your Gmail) for everything below. Never use your work email or a company GitHub org.
+- **Rotate any key that was ever pasted into a chat or a log** (Groq, Supabase secret key, TURN credential) before
+  sharing the link.
+- **Keep the project out of iCloud-synced folders** (Desktop/Documents with iCloud Drive): sync creates duplicate
+  files such as `conftest 2.py` or `.git/index 2`. Moving it to e.g. `~/dev/smiledesk` avoids that.
+- The repo's git identity is personal (`git config user.email` → your Gmail).
 
-| Account | Used for |
-|---|---|
-| GitHub (personal) | Code, the keep-alive cron, linking to Vercel |
-| Vercel (sign in with personal GitHub) | Frontend |
-| Supabase (personal GitHub or Gmail) | Database |
-| Groq | LLM + speech-to-text API (free tier) |
-| Fly.io **or** Railway | The Python agent server |
-| Daily (optional) | Voice transport in production |
+## 1. Database (Supabase)
 
-**Set the repo's git identity locally**, so commits don't use your work identity:
+Already done for this project (`supabase db push --remote --include-seed`, then the FAQ embedded with fastembed).
+For a fresh project:
+
 ```bash
-cd smiledesk
-git init
-git config user.name "Gladwin TM"
-git config user.email "<your-personal-gmail>"
+npx supabase login
+npx supabase link --project-ref <ref>
+npx supabase db push --remote --include-seed
+# FAQ embeddings, with EMBED_PROVIDER=fastembed and the cloud URL/key in .env:
+make ingest
 ```
 
-**If this Mac also has a work GitHub account**, use a separate SSH key for the personal one:
+Never run `supabase db reset` against the linked project: it wipes the remote database.
+
+## 2. Push the code to GitHub
+
+Create an **empty public** repo `smiledesk` on your personal GitHub, then from the repo root:
+
 ```bash
-ssh-keygen -t ed25519 -C "<your-personal-gmail>" -f ~/.ssh/id_ed25519_personal
+git remote add origin git@github.com:<you>/smiledesk.git
+git push -u origin main
 ```
-Add to `~/.ssh/config`:
+
+Check that no secrets are in the history (should print nothing):
+
+```bash
+git log -p | grep -iE "gsk_|sb_secret|service_role.*ey" | head
 ```
-Host github-personal
-  HostName github.com
-  User git
-  IdentityFile ~/.ssh/id_ed25519_personal
-```
-Then use `git@github-personal:<your-username>/smiledesk.git` as the remote.
 
-> If this is a company laptop, check your company's device policy for personal projects. The safest option is to push from a personal machine.
+## 3. Agent on a Hugging Face Space
+
+1. huggingface.co → **New Space** → name `smiledesk-agent`, SDK **Docker** (blank), hardware **CPU basic (free)**,
+   visibility **Public** (a private Space's URL needs a login, so the website couldn't call it).
+2. Space → **Settings → Variables and secrets** → add these as **secrets**:
+
+   | Name | Value |
+   |---|---|
+   | `SUPABASE_URL` | `https://<ref>.supabase.co` |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API keys → secret key |
+   | `LLM_API_KEY` | Groq API key |
+   | `STT_API_KEY` | Groq API key (same one) |
+   | `ICE_SERVERS_JSON` | The TURN JSON on one line, **without** the surrounding single quotes, e.g. `[{"urls":"stun:stun.relay.metered.ca:80"},{"urls":"turn:global.relay.metered.ca:80","username":"…","credential":"…"}]` |
+   | `WEB_ORIGIN` | `http://localhost:3000` for now; the Vercel URL after step 4 |
+
+   Everything else has hosted defaults in `agent/Dockerfile` (Groq model + fallbacks, fastembed, demo limits:
+   60 voice calls/day, 4-minute calls, 2 at once). Override any of them here as a plain variable.
+3. Push the `agent/` folder to the Space (it's a git repo of its own; the password is a Hugging Face access token
+   with **write** permission):
+
+   ```bash
+   git remote add space https://huggingface.co/spaces/<hf-user>/smiledesk-agent
+   git subtree push --prefix agent space main
+   ```
+
+   The first build takes ~10–15 minutes (dependencies + baking the Kokoro and fastembed models). Later pushes reuse
+   cached layers.
+4. Check: `https://<hf-user>-smiledesk-agent.hf.space/api/health` → `"status": "ok"` with all six components ready.
+
+## 4. Web app on Vercel
+
+1. vercel.com → **Add New → Project** → import `smiledesk` → **Root Directory: `web`** (framework: Next.js).
+2. Environment variable: `NEXT_PUBLIC_AGENT_URL` = `https://<hf-user>-smiledesk-agent.hf.space` (public; never put a
+   secret in a `NEXT_PUBLIC_*` variable). Optionally `NEXT_PUBLIC_GITHUB_URL` = your repo URL.
+3. Deploy, then set the Space secret `WEB_ORIGIN` to the Vercel URL (e.g. `https://smiledesk.vercel.app`; comma-separate
+   several). The Space restarts by itself.
+
+## 5. Keep it awake
+
+`.github/workflows/keepalive.yml` pings `/api/health` daily (keeps the Space and Supabase awake) and rebuilds the demo
+fixtures so "Thursday is full" stays true relative to the current week. Enable it with a repository **variable**:
+GitHub → Settings → Secrets and variables → Actions → **Variables** → `AGENT_URL` = the Space URL. Run it once by hand
+(Actions → keepalive → Run workflow) to check.
+
+## 6. Smoke test the live link
+
+- The boot screen turns all green, then the landing page shows.
+- Chat: a "things to try" chip books a slot; the calendar shows it; the Inspector shows the tool calls.
+- Voice on desktop Chrome, Safari, and a phone on mobile data (this exercises TURN).
+- "Reset demo" clears test bookings.
+
+## 7. Protecting the free quotas
+
+Already built in: per-IP rate limit (`RATE_LIMIT_PER_MINUTE`, keyed on the proxy-reported IP), at most 2 calls at once,
+4-minute calls, 60 voice calls a day with a friendly "Pearl is resting" message, and LLM fallback across three free
+Groq models. Still worth doing: usage alerts on each provider dashboard, and a short demo video in the README as a
+fallback for days when a quota runs out.
 
 ---
 
-## 2. What changes from local to deployed
+## Optional: paid hosting (Fly.io)
 
-| Layer | Local (now) | Deployed (recommended) | Why |
-|---|---|---|---|
-| Frontend | `next dev` | **Vercel Hobby** | Free and fast. Next.js is native there |
-| Database | Supabase local | **Supabase free project** | Same migrations |
-| LLM | Ollama `qwen3:8b` | **Groq** (OpenAI-compatible), a tool-calling model | Free tier, very low latency |
-| STT | Local Whisper | **Groq Whisper** (`whisper-large-v3-turbo`) | No GPU needed on the server |
-| TTS | Kokoro (local) | **Kokoro on CPU inside the agent container** | 82M params, runs on CPU |
-| Embeddings | Ollama `nomic-embed-text` | **fastembed (CPU) nomic v1.5, 768 dims** in-process | Same dimension, no extra API. Re-run ingest |
-| Voice transport | SmallWebRTC (peer-to-peer) | **Daily** (simplest) **or** SmallWebRTC + a TURN server | Cloud servers sit behind NAT, so plain peer-to-peer often fails |
-| Agent server | `uvicorn` on your Mac | **Fly.io** or **Railway** (~$5/month) | Voice needs an always-on process with WebSockets/WebRTC. Serverless won't work |
-
-> **Honest note on cost:** you can run the frontend, DB and APIs for free. A server that stays awake for real-time voice usually costs about $5/month. Free options exist (Oracle Cloud Always Free, Hugging Face Spaces), but they sleep or are fiddly to set up with WebRTC. For a resume link, $5/month for something that reliably works is worth it.
-
-All of these are **env changes only**, because the app was built with swappable providers (see `.env.example`).
-
----
-
-## 3. Step by step
-
-### 3.1 Push the code
-1. Create an **empty** repo `smiledesk` on your personal GitHub (public, so recruiters can read it).
-2. Add the remote and push:
-   ```bash
-   git remote add origin git@github-personal:<your-username>/smiledesk.git
-   ```
-   ```bash
-   git push -u origin main
-   ```
-3. Double-check that `.env` is in `.gitignore` and **no keys are committed**:
-   ```bash
-   git log -p | grep -iE "service_role|gsk_|sk-" | head
-   ```
-
-### 3.2 Supabase (database)
-1. supabase.com → new project → region **Mumbai (ap-south-1)** → save the DB password in a password manager.
-2. Link and push the schema:
-   ```bash
-   supabase login
-   ```
-   ```bash
-   supabase link --project-ref <your-project-ref>
-   ```
-   ```bash
-   supabase db push
-   ```
-3. Seed the data. `db push` doesn't run `seed.sql`. Copy the connection string from **Project Settings → Database**:
-   ```bash
-   psql "<connection-string>" -f supabase/seed.sql
-   ```
-   Never run `supabase db reset --linked` after launch, because it wipes the remote DB.
-4. Copy the **Project URL** and **service_role key** (Project Settings → API) for the agent server. Don't put them anywhere else.
-
-### 3.3 Groq (LLM + STT)
-1. console.groq.com → create an API key.
-2. Choose a model that's good at **tool calling** from Groq's current model list. Run your evals against it before switching (`make eval` with the Groq env).
-
-### 3.4 Voice transport
-**Option A: Daily (recommended, least hassle)**
-1. dashboard.daily.co → create an API key and check the current free minutes.
-2. Set `VOICE_TRANSPORT=daily` and `DAILY_API_KEY=...`.
-
-**Option B: keep SmallWebRTC and add TURN**
-1. Get TURN credentials from a provider with a free tier (e.g. Cloudflare Realtime TURN or Metered).
-2. Set `ICE_SERVERS_JSON` on the server, and pass the same list to the client.
-
-### 3.5 Agent server (Fly.io example; Railway works similarly)
-1. Make sure `agent/Dockerfile` exists. Ask Claude Code: "add a production Dockerfile for the agent: Python 3.12 slim, uv, Kokoro + fastembed models downloaded at build time, uvicorn on $PORT".
-2. Deploy:
-   ```bash
-   cd agent && fly launch --no-deploy
-   ```
-   Pick region **bom (Mumbai)** and a machine with **at least 1–2 GB RAM** (Kokoro + fastembed). Set `min_machines_running = 1` in `fly.toml` so it doesn't cold-start.
-3. Set secrets. Each value goes in as a secret, never in `fly.toml`:
-   ```bash
-   fly secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... LLM_BASE_URL=https://api.groq.com/openai/v1 LLM_API_KEY=... LLM_MODEL=... JUDGE_BASE_URL=https://api.groq.com/openai/v1 JUDGE_API_KEY=... JUDGE_MODEL=... STT_PROVIDER=groq STT_API_KEY=... TTS_PROVIDER=kokoro EMBED_PROVIDER=fastembed VOICE_TRANSPORT=daily DAILY_API_KEY=... WEB_ORIGIN=https://<your-app>.vercel.app DEMO_MODE=true LLM_DISABLE_THINKING=true
-   ```
-   ```bash
-   fly deploy
-   ```
-4. Embed the FAQ against the cloud DB (once, and after any embedding change):
-   ```bash
-   fly ssh console -C "python -m scripts.ingest_kb"
-   ```
-5. Check health:
-   ```bash
-   curl https://<your-agent>.fly.dev/api/health
-   ```
-
-### 3.6 Frontend (Vercel)
-1. vercel.com → **Add New Project** → import `smiledesk` → **Root Directory: `web`**.
-2. Env var: `NEXT_PUBLIC_AGENT_URL=https://<your-agent>.fly.dev`. Nothing secret goes in the frontend.
-3. Deploy. Then set the server's `WEB_ORIGIN` to the final Vercel URL (or your custom domain) and redeploy the agent.
-
-### 3.7 Keep it awake
-Free Supabase projects **pause after about a week with no activity**. Add `.github/workflows/keepalive.yml`:
-```yaml
-name: keepalive
-on:
-  schedule: [{ cron: "0 3 * * *" }]   # daily, 08:30 IST
-  workflow_dispatch:
-jobs:
-  ping:
-    runs-on: ubuntu-latest
-    steps:
-      - run: curl -fsS https://<your-agent>.fly.dev/api/health
-```
-`/api/health` queries the DB, so this keeps both awake.
-
-It's also worth having the agent run `reset_demo_fixtures()` once a day, so "Thursday full" and the other demos stay correct relative to today.
-
----
-
-## 4. Protect your free tiers from abuse
-
-A public voice demo can burn API quota fast. Before sharing the link:
-- [ ] **Rate limit** per IP on `/api/chat` and on starting a voice session (already in the plan).
-- [ ] **Max voice session** of 3–5 minutes (`MAX_VOICE_SESSION_SECONDS`).
-- [ ] A **daily global cap** on voice sessions. When it's hit, show "Demo is resting for today, try chat or watch the video".
-- [ ] Optional: **Cloudflare Turnstile** (free) before "Talk to Pearl" to block bots.
-- [ ] Set **usage alerts or spend limits** on every provider dashboard.
-- [ ] A **60-second demo video** on the landing page and in the README, as a fallback if quota runs out.
-
----
-
-## 5. Pre-launch checklist
-- [ ] Run `make eval` with the **production** providers. Expect results to differ from local Qwen; note both in the README.
-- [ ] Voice works on desktop Chrome, Safari, and a phone on mobile data (this tests the TURN/Daily setup).
-- [ ] Boot screen, error states and reset demo all work in production.
-- [ ] No secrets in the repo, in `NEXT_PUBLIC_*` variables, or in client bundles (search the built JS for `service_role`).
-- [ ] The README has the live link, a GIF, the architecture, eval results, and "run locally" steps.
-- [ ] Add the live link and GitHub link to your resume and LinkedIn **Featured** section.
-
----
-
-## 6. Optional
-- **Custom domain** (e.g. `smiledesk.<yourname>.dev`): add it in Vercel, update `WEB_ORIGIN`.
-- **Basic analytics:** Vercel Analytics (free tier) shows whether recruiters actually open the link.
+`agent/fly.toml` deploys the same image to Fly.io (Mumbai, 2 GB, always on): no sleeping, roughly $10–15/month.
+`fly launch --no-deploy` (keep the existing file) → `fly secrets set` with the same secrets → `fly deploy`.
+Fly's trial lasts about 2 machine hours or 7 days, then it needs a card.

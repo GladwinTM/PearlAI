@@ -46,7 +46,7 @@ from smiledesk.agent.prompts import render
 from smiledesk.agent.tools import TOOL_SCHEMAS, ToolContext, assistant_text_before_last_user, execute_tool
 from smiledesk.clock import now
 from smiledesk.config import Settings, get_settings
-from smiledesk.providers.llm import llm_extra_body
+from smiledesk.providers.llm import get_llm_client, llm_extra_body
 from smiledesk.providers.stt import get_stt
 from smiledesk.providers.tts import get_tts
 from smiledesk.voice.events import LatencyObserver, VoiceGuard, VoiceSession, strip_notes
@@ -86,8 +86,23 @@ def tools_schema() -> ToolsSchema:
     )
 
 
+class _SharedClientLLMService(OpenAILLMService):
+    """Pipecat's OpenAI service on our shared client, so voice gets the same model fallback as chat."""
+
+    def create_client(
+        self,
+        api_key: Any = None,
+        base_url: Any = None,
+        organization: Any = None,
+        project: Any = None,
+        default_headers: Any = None,
+        **kwargs: Any,
+    ) -> Any:
+        return get_llm_client()
+
+
 def create_llm(s: Settings) -> OpenAILLMService:
-    return OpenAILLMService(
+    return _SharedClientLLMService(
         api_key=s.llm_api_key.get_secret_value() or "unused",
         base_url=s.llm_base_url,
         settings=OpenAILLMService.Settings(

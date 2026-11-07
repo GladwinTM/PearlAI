@@ -98,3 +98,68 @@ def test_client_ip_ignores_spoofable_forwarded_entries() -> None:
     # The client can prepend anything; only the entry our proxy appended counts.
     assert client_ip(req({"X-Forwarded-For": "6.6.6.6, 203.0.113.7"})) == "203.0.113.7"
     assert client_ip(req({})) == "10.0.0.9"
+
+
+def test_parse_fallbacks() -> None:
+    from smiledesk.providers.llm import parse_fallbacks
+
+    assert parse_fallbacks(" openai/gpt-oss-120b , qwen/qwen3.8-27b:none,") == [
+        ("openai/gpt-oss-120b", None),
+        ("qwen/qwen3.8-27b", "none"),
+    ]
+    assert parse_fallbacks("qwen3:8b") == [("qwen3:8b", None)]  # an Ollama tag, not a reasoning setting
+    assert parse_fallbacks("") == []
+
+
+async def test_rate_limited_model_falls_back_with_its_own_reasoning_setting() -> None:
+    import json
+
+    import httpx2
+    from openai import AsyncOpenAI
+
+    from smiledesk.providers.llm import ModelFallbackTransport
+
+    seen: list[dict[str, object]] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        body = json.loads(request.content)
+        seen.append({"model": body["model"], "reasoning_effort": body.get("reasoning_effort")})
+        if body["model"] in ("a", "b"):
+            return httpx2.Response(429, json={"error": {"message": "rate limited"}})
+        return httpx2.Response(200, json={"id": "x", "object": "chat.completion", "created": 0, "model": body["model"],
+                                         "choices": [{"index": 0, "finish_reason": "stop",
+                                                      "message": {"role": "assistant", "content": "hi"}}]})  # fmt: skip
+
+    transport = ModelFallbackTransport([("b", None), ("c", "none")], inner=httpx2.MockTransport(handler))
+    client = AsyncOpenAI(
+        base_url="http://llm.test/v1", api_key="k", max_retries=0, http_client=httpx2.AsyncClient(transport=transport)
+    )
+    out = await client.chat.completions.create(
+        model="a", messages=[{"role": "user", "content": "hi"}], extra_body={"reasoning_effort": "low"}
+    )
+    assert out.choices[0].message.content == "hi" and out.model == "c"
+    # b inherits the primary's setting; c uses its own ("none").
+    assert seen == [
+        {"model": "a", "reasoning_effort": "low"},
+        {"model": "b", "reasoning_effort": "low"},
+        {"model": "c", "reasoning_effort": "none"},
+    ]
+
+
+async def test_fallback_gives_up_with_the_last_429() -> None:
+    import httpx2
+    from openai import AsyncOpenAI, RateLimitError
+
+    from smiledesk.providers.llm import ModelFallbackTransport
+
+    transport = ModelFallbackTransport(
+        [("b", None)], inner=httpx2.MockTransport(lambda r: httpx2.Response(429, json={}))
+    )
+    client = AsyncOpenAI(
+        base_url="http://llm.test/v1", api_key="k", max_retries=0, http_client=httpx2.AsyncClient(transport=transport)
+    )
+    try:
+        await client.chat.completions.create(model="a", messages=[{"role": "user", "content": "hi"}])
+    except RateLimitError:
+        return
+    raise AssertionError("expected RateLimitError")

@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     # Sent as `reasoning_effort` when thinking is "disabled". qwen3 (Ollama): "none". Models that can't switch reasoning
     # off accept only some values, e.g. Groq gpt-oss: "low" | "medium" | "high" ("none" is rejected there).
     llm_reasoning_effort: str = "none"
+    # Comma-separated backups on the same provider, tried in order when the current model is rate-limited (429).
+    # Each entry is "model" or "model:reasoning_effort", e.g. "openai/gpt-oss-120b,qwen/qwen3.8-27b:none". Free tiers
+    # rate-limit per model, so this multiplies the free headroom. Empty = no fallback.
+    llm_fallback_models: str = ""
     llm_keep_alive: str = "30m"  # Ollama only; ignored by hosted providers
     # Ollama only. Ollama's default context (4096) is smaller than prompt + tools + history, and it truncates
     # silently. The OpenAI endpoint can't set num_ctx per request, so warmup creates a derived model

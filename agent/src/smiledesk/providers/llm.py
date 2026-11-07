@@ -5,26 +5,99 @@ Switching provider is an .env change: LLM_BASE_URL / LLM_API_KEY / LLM_MODEL.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
+import httpx2  # the OpenAI SDK's HTTP layer (a separate package from httpx)
+from loguru import logger
 from openai import AsyncOpenAI
 
 from smiledesk.config import Settings, get_settings
 
-_clients: dict[tuple[str, str], AsyncOpenAI] = {}
+_clients: dict[tuple[str, str, str], AsyncOpenAI] = {}
 
 
-def _client(base_url: str, api_key: str) -> AsyncOpenAI:
-    key = (base_url, api_key)
+def parse_fallbacks(spec: str) -> list[tuple[str, str | None]]:
+    """ "a,b:none" → [("a", None), ("b", "none")]. A model id may itself contain a colon (Ollama tags), so only a
+    known reasoning_effort value after the last colon is treated as one."""
+    out: list[tuple[str, str | None]] = []
+    for raw in spec.split(","):
+        item = raw.strip()
+        if not item:
+            continue
+        model, _, effort = item.rpartition(":")
+        if model and effort in ("none", "low", "medium", "high", "default"):
+            out.append((model, effort))
+        else:
+            out.append((item, None))
+    return out
+
+
+class ModelFallbackTransport(httpx2.AsyncBaseTransport):
+    """Retries a rate-limited chat completion (HTTP 429) on the next model, before the client ever sees the 429.
+
+    Sits under the OpenAI SDK, so chat (core.py) and voice (Pipecat) get it for free and streaming is untouched:
+    the status code arrives before any body is read.
+    """
+
+    def __init__(self, fallbacks: list[tuple[str, str | None]], inner: httpx2.AsyncBaseTransport | None = None) -> None:
+        self.fallbacks = fallbacks
+        self.inner = inner or httpx2.AsyncHTTPTransport()
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        if request.method != "POST" or not request.url.path.endswith("/chat/completions") or not self.fallbacks:
+            return await self.inner.handle_async_request(request)
+        body = json.loads(await request.aread())
+        primary = body.get("model")
+        attempts: list[tuple[str, str | None]] = [(primary, body.get("reasoning_effort"))]
+        attempts += [(m, e) for m, e in self.fallbacks if m != primary]
+        response: httpx2.Response | None = None
+        for i, (model, effort) in enumerate(attempts):
+            b = {**body, "model": model}
+            if i > 0:
+                b.pop("reasoning_effort", None)
+                if effort is not None:
+                    b["reasoning_effort"] = effort
+                elif "reasoning_effort" in body:
+                    b["reasoning_effort"] = body["reasoning_effort"]
+            content = json.dumps(b).encode()
+            headers = [(k, v) for k, v in request.headers.raw if k.lower() != b"content-length"]
+            headers.append((b"content-length", str(len(content)).encode()))
+            attempt = httpx2.Request(
+                request.method, request.url, headers=headers, content=content, extensions=request.extensions
+            )
+            response = await self.inner.handle_async_request(attempt)
+            if response.status_code != 429 or i == len(attempts) - 1:
+                if i > 0:
+                    logger.info(f"LLM fallback: answered by {model} (after {i} rate-limited model(s))")
+                return response
+            await response.aclose()
+            logger.info(f"LLM {model} is rate-limited; trying {attempts[i + 1][0]}")
+        assert response is not None
+        return response
+
+    async def aclose(self) -> None:
+        await self.inner.aclose()
+
+
+def _client(base_url: str, api_key: str, fallbacks: str = "") -> AsyncOpenAI:
+    key = (base_url, api_key, fallbacks)
     if key not in _clients:
-        _clients[key] = AsyncOpenAI(base_url=base_url, api_key=api_key or "unused", max_retries=1, timeout=120)
+        http = (
+            httpx2.AsyncClient(transport=ModelFallbackTransport(parse_fallbacks(fallbacks)), timeout=120)
+            if fallbacks
+            else None
+        )
+        _clients[key] = AsyncOpenAI(
+            base_url=base_url, api_key=api_key or "unused", max_retries=1, timeout=120, http_client=http
+        )
     return _clients[key]
 
 
 def get_llm_client(settings: Settings | None = None) -> AsyncOpenAI:
     s = settings or get_settings()
-    return _client(s.llm_base_url, s.llm_api_key.get_secret_value())
+    return _client(s.llm_base_url, s.llm_api_key.get_secret_value(), s.llm_fallback_models)
 
 
 def get_judge_client(settings: Settings | None = None) -> AsyncOpenAI:
