@@ -12,6 +12,8 @@ export interface TTSCallbacks {
   onSpeakStart?: () => void; // first audio of a burst starts playing
   onIdle?: () => void; // queue drained
   onStatus?: (status: "loading" | "kokoro" | "native", detail?: string) => void;
+  /** The browser is keeping Pearl silent (phones: audio not unlocked by a tap, or interrupted by the mic). */
+  onBlocked?: () => void;
 }
 
 const VOICE = "af_heart";
@@ -42,6 +44,32 @@ export class BrowserTTS {
     this.analyser.connect(this.gain);
     this.gain.connect(this.ctx.destination);
     this.levelBuf = new Uint8Array(new ArrayBuffer(this.analyser.fftSize));
+    // iOS suspends ("interrupted") the context when the microphone starts or a call/Siri takes the audio.
+    this.ctx.onstatechange = () => {
+      const state = this.ctx.state as string;
+      if (state === "suspended" || state === "interrupted") this.ctx.resume().catch(() => this.cb.onBlocked?.());
+    };
+  }
+
+  /**
+   * Call SYNCHRONOUSLY in the tap/click handler, before any `await`: phone browsers only allow audio that starts
+   * inside the gesture. Unlocks Web Audio (a silent buffer) and the built-in voice (a silent utterance).
+   */
+  unlock() {
+    void this.ctx.resume().catch(() => {});
+    try {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+      src.connect(this.ctx.destination);
+      src.start();
+    } catch {
+      /* nothing to unlock */
+    }
+    if (typeof speechSynthesis !== "undefined") {
+      const u = new SpeechSynthesisUtterance(" ");
+      u.volume = 0;
+      speechSynthesis.speak(u);
+    }
   }
 
   /** Start downloading Kokoro (after the microphone is up, so the two downloads don't compete). */
@@ -168,6 +196,7 @@ export class BrowserTTS {
   private playSamples(samples: Float32Array, rate: number, gen: number): Promise<void> {
     return new Promise((resolve) => {
       if (gen !== this.generation) return resolve();
+      if (this.ctx.state !== "running") this.ctx.resume().catch(() => this.cb.onBlocked?.());
       const buffer = this.ctx.createBuffer(1, samples.length, rate);
       buffer.copyToChannel(samples as Float32Array<ArrayBuffer>, 0);
       const src = this.ctx.createBufferSource();
@@ -201,6 +230,12 @@ export class BrowserTTS {
       // Some browsers never fire onend (e.g. no voices installed): don't let the queue hang.
       const guard = setTimeout(finish, 1500 + text.split(/\s+/).length * 450);
       u.onend = u.onerror = finish;
+      // Speech that never starts means the browser blocked it (phones without an unlocking tap).
+      let started = false;
+      u.onstart = () => (started = true);
+      setTimeout(() => {
+        if (!started && !done && gen === this.generation) this.cb.onBlocked?.();
+      }, 2500);
       this.nativeSpeaking = true;
       this.markStart();
       speechSynthesis.speak(u);

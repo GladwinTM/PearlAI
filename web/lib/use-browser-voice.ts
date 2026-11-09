@@ -74,6 +74,7 @@ export function useBrowserVoice({ dispatch, persona, conversationId }: Options) 
   const [orb, setOrb] = useState<OrbState>("idle");
   const [engine, setEngine] = useState<string>("");
   const [waiting, setWaiting] = useState(false); // a request is being worked on and Pearl isn't talking yet
+  const [audioBlocked, setAudioBlocked] = useState(false); // the browser is keeping Pearl silent
   const audioRef = useRef<HTMLAudioElement | null>(null); // unused here (Web Audio), kept for a shared interface
   const localLevel = useRef(0);
   const remoteLevel = useRef(0);
@@ -297,17 +298,13 @@ export function useBrowserVoice({ dispatch, persona, conversationId }: Options) 
     setError(null);
     setSeconds(0);
     setStatus("connecting");
+    setAudioBlocked(false);
     hangup.current = new AbortController();
     try {
-      const cfg = (await (await fetch(`${AGENT_URL}/api/voice/config`, { cache: "no-store" })).json()) as {
-        daily_limit_reached?: boolean;
-        resting_message?: string;
-        max_session_seconds?: number;
-      };
-      if (cfg.daily_limit_reached) throw new Error(cfg.resting_message ?? "Pearl is resting for today. Chat still works!");
-      setMaxSeconds(cfg.max_session_seconds ?? 240);
-
+      // Create and unlock the audio player FIRST, synchronously inside the tap: phones (iOS Safari especially) keep
+      // audio silent if it's first started after an `await`.
       const t = new BrowserTTS({
+        onBlocked: () => setAudioBlocked(true),
         onSpeakStart: () => {
           setOrb("speaking");
           vad.current?.setOptions(VAD_WHILE_PEARL_SPEAKS); // harder to trigger on her own echo
@@ -327,7 +324,15 @@ export function useBrowserVoice({ dispatch, persona, conversationId }: Options) 
           ),
       });
       tts.current = t;
-      await t.resume(); // inside the click: unlocks audio playback
+      t.unlock();
+
+      const cfg = (await (await fetch(`${AGENT_URL}/api/voice/config`, { cache: "no-store" })).json()) as {
+        daily_limit_reached?: boolean;
+        resting_message?: string;
+        max_session_seconds?: number;
+      };
+      if (cfg.daily_limit_reached) throw new Error(cfg.resting_message ?? "Pearl is resting for today. Chat still works!");
+      setMaxSeconds(cfg.max_session_seconds ?? 240);
       // Greet right away (browser voice until Kokoro is ready) while the microphone pipeline loads.
       say(convId.current ? RESUME_GREETING : GREETING);
 
@@ -358,6 +363,7 @@ export function useBrowserVoice({ dispatch, persona, conversationId }: Options) 
       });
       vad.current = v as unknown as VAD;
       await v.start();
+      void t.resume().catch(() => setAudioBlocked(true)); // iOS interrupts playback when the mic starts
       if (t.speaking) vad.current.setOptions(VAD_WHILE_PEARL_SPEAKS);
       t.startKokoro();
 
@@ -398,7 +404,11 @@ export function useBrowserVoice({ dispatch, persona, conversationId }: Options) 
     return () => clearTimeout(t);
   }, [status, maxSeconds, dispatch, end]);
 
-  const enableAudio = useCallback(() => void tts.current?.resume(), []);
+  // The "enable sound" button: a fresh tap, so unlocking works this time.
+  const enableAudio = useCallback(() => {
+    tts.current?.unlock();
+    setAudioBlocked(false);
+  }, []);
 
-  return { status, error, seconds, maxSeconds, orb, audioBlocked: false, audioRef, localLevel, remoteLevel, start, end, enableAudio, engine, waiting };
+  return { status, error, seconds, maxSeconds, orb, audioBlocked, audioRef, localLevel, remoteLevel, start, end, enableAudio, engine, waiting };
 }
