@@ -25,3 +25,6 @@ supabase/.temp
 # Test output
 web/test-results/
 web/playwright-report/
+
+# Stock design references (style only, not ours to ship)
+docs/design-refs/

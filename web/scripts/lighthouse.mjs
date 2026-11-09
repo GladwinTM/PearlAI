@@ -1,4 +1,5 @@
-// Lighthouse accessibility (and friends) for the landing page, using Playwright's Chromium.
+// Lighthouse performance, accessibility (and friends) for the landing page, using Playwright's Chromium.
+// Measure a production build (next build && next start -p 3100): dev-mode performance numbers are meaningless.
 //   npm run lighthouse                      # against http://localhost:3000/
 //   LH_URL=http://localhost:3100/ npm run lighthouse
 import { chromium } from "@playwright/test";
@@ -15,7 +16,7 @@ try {
     port: chrome.port,
     output: "json",
     logLevel: "error",
-    onlyCategories: ["accessibility", "best-practices", "seo"],
+    onlyCategories: ["performance", "accessibility", "best-practices", "seo"],
   });
   const lhr = result?.lhr;
   if (!lhr) throw new Error("Lighthouse returned no result");

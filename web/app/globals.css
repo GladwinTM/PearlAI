@@ -10,6 +10,16 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-geist-sans);
+  --color-sky: var(--sky);
+  --color-ice: var(--ice);
+  --color-blue: var(--blue);
+  --color-royal: var(--royal);
+  --color-deep: var(--deep);
+  --color-yellow: var(--yellow);
+  --color-coral: var(--coral);
+  --color-lime: var(--lime);
+  --color-lavender: var(--lavender);
+  --color-pink: var(--pink);
   --color-teal: var(--teal);
   --color-aqua: var(--aqua);
   --color-navy: var(--navy);
@@ -96,6 +106,27 @@
   --sidebar-accent-foreground: oklch(0.27 0.05 258);
   --sidebar-border: oklch(0.9 0.014 215);
   --sidebar-ring: oklch(0.58 0.11 192);
+  /* "Lego" palette (fills; text on them stays navy, or white on royal/deep). */
+  --sky: oklch(0.768 0.123 250);
+  --ice: oklch(0.876 0.056 263);
+  --blue: oklch(0.595 0.214 261);
+  --royal: oklch(0.425 0.186 266);
+  --deep: oklch(0.219 0.119 266);
+  --yellow: oklch(0.861 0.159 86);
+  --coral: oklch(0.709 0.184 29);
+  --lime: oklch(0.795 0.18 134);
+  --lavender: oklch(0.772 0.111 294);
+  --pink: oklch(0.809 0.125 353);
+  /* Pearl the tooth (the same in both themes: she's a white toy). */
+  --tooth: oklch(0.985 0.004 90);
+  --tooth-ink: oklch(0.19 0.025 285);
+  --tooth-blush: oklch(0.78 0.12 335);
+  --tooth-glove: oklch(1 0 0);
+  --tooth-mouth: oklch(0.27 0.07 350);
+  --tooth-tongue: oklch(0.74 0.15 15);
+  --tooth-shadow: var(--deep);
+  --sparkle: var(--yellow);
+  --heart: oklch(0.72 0.17 0);
 }
 
 .dark {
@@ -139,6 +170,7 @@
   --sidebar-accent-foreground: oklch(0.96 0.01 215);
   --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.75 0.11 188);
+  --tooth-shadow: oklch(0.08 0.04 266);
 }
 
 @layer base {
