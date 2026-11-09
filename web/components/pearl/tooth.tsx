@@ -24,6 +24,8 @@ interface ToothProps {
   expression?: ToothExpression | null;
   /** Force the still pose (previews). Reduced motion does this automatically. */
   still?: boolean;
+  /** Cap the frame rate (e.g. 30 during a voice call). */
+  maxFps?: number;
 }
 
 let webglSupport: boolean | null = null;
@@ -51,7 +53,7 @@ function posterFace(mode: ToothMode, expression: ToothExpression | null): ToothF
  * Pearl, the 3D clay tooth (replaces the Orb, same API plus `expression`). A static SVG poster shows while three.js
  * loads, when WebGL is missing, and fades out once the first 3D frame is drawn. Pauses off-screen and in hidden tabs.
  */
-export function Tooth({ mode = "idle", level, className, label, expression = null, still }: ToothProps) {
+export function Tooth({ mode = "idle", level, className, label, expression = null, still, maxFps }: ToothProps) {
   const box = useRef<HTMLDivElement>(null);
   const webgl = useSyncExternalStore(noSubscribe, hasWebGL, () => false);
   const reduced = useReducedMotion() ?? false;
@@ -79,7 +81,7 @@ export function Tooth({ mode = "idle", level, className, label, expression = nul
         className={cn("absolute top-[17%] left-[25%] h-[62%] w-[50%] transition-opacity duration-300", ready && "opacity-0")}
       />
       {webgl && (
-        <ToothScene mode={mode} expression={expression} level={level} active={onScreen && tabVisible} still={!!still || reduced} onReady={() => setReady(true)} />
+        <ToothScene mode={mode} expression={expression} level={level} active={onScreen && tabVisible} still={!!still || reduced} maxFps={maxFps} onReady={() => setReady(true)} />
       )}
     </div>
   );

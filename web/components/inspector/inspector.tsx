@@ -64,12 +64,12 @@ export function Inspector({ timeline, latencies, className }: { timeline: Timeli
 
 function RunningOn() {
   const { health } = useHealth();
-  if (!health) return <div className="h-12 animate-pulse rounded-xl bg-muted" />;
+  if (!health) return <div className="h-12 animate-pulse rounded-[1.25rem] bg-muted" />;
   const comps = ["llm", "stt", "tts", "embeddings"].map((k) => health.components[k]).filter(Boolean);
   return (
-    <section aria-label="Running on" className="rounded-xl border bg-card p-3">
+    <section aria-label="Running on" className="brick-soft rounded-[1.25rem] bg-card p-3 [--brick-depth:3px]">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Running on</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Running on</h3>
         {health.all_local && (
           <Badge variant="secondary" className="bg-success/15 text-success">
             100% local
@@ -78,11 +78,11 @@ function RunningOn() {
       </div>
       <ul className="flex flex-wrap gap-1.5 text-xs">
         {comps.map((c) => (
-          <li key={c.key} className="rounded-md bg-muted px-2 py-1" title={`${c.label}: ${c.provider}`}>
+          <li key={c.key} className="rounded-full bg-muted px-2.5 py-1" title={`${c.label}: ${c.provider}`}>
             <span className="text-muted-foreground">{c.label}:</span> {c.model}
           </li>
         ))}
-        <li className="rounded-md bg-muted px-2 py-1">
+        <li className="rounded-full bg-muted px-2.5 py-1">
           <span className="text-muted-foreground">Prompt:</span> {health.prompt_version}
         </li>
       </ul>
@@ -97,9 +97,9 @@ function LatencyPanel({ latencies }: { latencies: TurnLatency[] }) {
   const voice = latencies.filter((l) => l.channel === "voice" && !l.partial && !l.tools && l.total != null).map((l) => l.total as number);
   const med = median(voice);
   return (
-    <section aria-label="Latency per turn" className="rounded-xl border bg-card p-3">
+    <section aria-label="Latency per turn" className="brick-soft rounded-[1.25rem] bg-card p-3 [--brick-depth:3px]">
       <div className="mb-2 flex items-baseline justify-between gap-2">
-        <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Latency per turn</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Latency per turn</h3>
         {med != null && (
           <span className="text-xs text-muted-foreground">
             median voice-to-voice <strong className="text-foreground tabular-nums">{secs(med)}</strong>
@@ -125,7 +125,7 @@ function LatencyPanel({ latencies }: { latencies: TurnLatency[] }) {
                     {l.answerMs != null && l.tools > 0 ? <span className="text-muted-foreground"> · answer {secs(l.answerMs)}</span> : null}
                   </span>
                 </div>
-                <div className="flex h-2.5 overflow-hidden rounded-full bg-muted" role="img" aria-label={label || "no breakdown"}>
+                <div className="flex h-3 overflow-hidden rounded-full bg-muted ring-1 ring-edge-soft" role="img" aria-label={label || "no breakdown"}>
                   {l.segments.map((s) => (
                     <motion.span
                       key={s.key}
@@ -165,8 +165,8 @@ function Timeline({ items }: { items: TimelineItem[] }) {
   }, [items.length, reduce]);
 
   return (
-    <section aria-label="Event timeline" className="flex min-h-0 flex-1 flex-col rounded-xl border bg-card">
-      <h3 className="border-b px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Timeline</h3>
+    <section aria-label="Event timeline" className="brick-soft flex min-h-0 flex-1 flex-col rounded-[1.25rem] bg-card [--brick-depth:3px]">
+      <h3 className="border-b-2 border-edge-soft px-3 py-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Timeline</h3>
       <div
         ref={box}
         tabIndex={0}
@@ -205,7 +205,7 @@ function TimelineRow({ it }: { it: TimelineItem }) {
       initial={reduce ? false : { opacity: 0, x: 8 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.2 }}
-      className={cn("rounded-lg px-2 py-1.5 text-xs", it.kind === "outcome" && "bg-success/10", it.kind === "safety" && "bg-destructive/10")}
+      className={cn("rounded-xl px-2 py-1.5 text-xs", it.kind === "outcome" && "bg-lime/30", it.kind === "safety" && "bg-coral/25")}
     >
       <div className="flex items-start gap-2">
         <Icon className={cn("mt-0.5 size-3.5 shrink-0", k.tone)} aria-hidden />
@@ -218,7 +218,7 @@ function TimelineRow({ it }: { it: TimelineItem }) {
           {it.json !== undefined && it.kind === "tool_result" && (
             <details className="mt-1">
               <summary className="cursor-pointer text-muted-foreground hover:text-foreground">JSON</summary>
-              <pre className="mt-1 max-h-60 overflow-auto rounded-md bg-muted p-2 font-mono text-[0.7rem] leading-snug">
+              <pre className="mt-1 max-h-60 overflow-auto rounded-lg bg-muted p-2 font-mono text-[0.7rem] leading-snug">
                 {JSON.stringify(it.json, null, 2)}
               </pre>
             </details>

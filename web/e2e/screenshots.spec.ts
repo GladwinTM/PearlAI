@@ -24,7 +24,8 @@ for (const [device, viewport] of Object.entries(VIEWPORTS)) {
       });
       await page.goto("/");
       await expect(page.locator(BOOT)).toHaveCount(0, { timeout: 90_000 });
-      await page.waitForTimeout(1500); // let the entrance fades finish
+      await page.waitForTimeout(4000); // entrance animations + the 3D tooth's first frame
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await page.screenshot({ path: `${OUT}/landing-${device}-${scheme}.png` });
 
       await page.goto("/talk?mode=chat");

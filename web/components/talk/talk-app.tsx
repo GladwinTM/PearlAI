@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useHealth } from "@/components/boot/health-provider";
 import { WeekCalendar } from "@/components/calendar/week-calendar";
 import { Inspector } from "@/components/inspector/inspector";
+import type { ToothExpression } from "@/components/pearl/tooth";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { resetDemo } from "@/lib/chat";
@@ -29,6 +30,8 @@ type Mode = "voice" | "chat";
 type MobilePane = "talk" | "calendar" | "inspector";
 
 const WRITE_TOOLS = new Set(["book_appointment", "reschedule_appointment", "cancel_appointment"]);
+const THANKS = /\b(thanks|thank you|thank u|thx|bye|goodbye|good bye|see you)\b/i;
+const EXPRESSION_MS = 2600;
 
 export function TalkApp() {
   const params = useSearchParams();
@@ -52,6 +55,14 @@ export function TalkApp() {
   const [calendarKey, setCalendarKey] = useState(0);
   const [focusDate, setFocusDate] = useState<string | null>(null);
   const [recentActivity, setRecentActivity] = useState(0);
+  // Pearl's one-off reactions, from events the client already receives. Cleared after a moment.
+  const [expression, setExpression] = useState<ToothExpression | null>(null);
+  const react = useCallback((e: ToothExpression) => setExpression(e), []);
+  useEffect(() => {
+    if (!expression) return;
+    const t = setTimeout(() => setExpression(null), EXPRESSION_MS);
+    return () => clearTimeout(t);
+  }, [expression]);
 
   const chat = useChat({ dispatch, persona, conversationId: state.conversationId });
   // Refs are pulled out by name so the React Compiler can tell them apart from render values.
@@ -86,7 +97,12 @@ export function TalkApp() {
     seen.current = state.timeline.length;
     for (const it of fresh) {
       if (it.kind === "outcome") toast.success(it.title);
-      if (it.kind === "safety") toast.warning("Urgent symptoms detected: Pearl is escalating to the clinic team.");
+      if (it.kind === "safety") {
+        toast.warning("Urgent symptoms detected: Pearl is escalating to the clinic team.");
+        react("worried");
+      }
+      if (it.kind === "tool_result" && it.ok && it.tool === "book_appointment") react("wink");
+      if (it.kind === "tool_result" && it.tool === "escalate_to_human" && (it.json as { urgency?: string } | undefined)?.urgency === "urgent") react("worried");
       if (it.kind === "tool_result" && it.ok && it.tool && WRITE_TOOLS.has(it.tool)) {
         setCalendarKey((k) => k + 1);
         const start = (it.json as { start?: string } | undefined)?.start;
@@ -94,7 +110,18 @@ export function TalkApp() {
       }
     }
     if (fresh.length) setRecentActivity(Date.now());
-  }, [state.timeline]);
+  }, [state.timeline, react]);
+
+  // "Thanks" / "bye" from the caller → Pearl holds up a heart.
+  const seenMessages = useRef(0);
+  useEffect(() => {
+    const fresh = state.messages.slice(seenMessages.current);
+    seenMessages.current = state.messages.length;
+    for (const m of fresh) {
+      const text = m.parts[0]?.kind === "text" ? m.parts[0].text : "";
+      if (m.role === "user" && THANKS.test(text)) react("heart");
+    }
+  }, [state.messages, react]);
 
   // Poll the calendar fast while something is happening (a call, a reply in flight, or activity in the last 30 s).
   const [now, setNow] = useState(() => Date.now());
@@ -172,7 +199,7 @@ export function TalkApp() {
       </SiteHeader>
 
       {/* mobile pane switcher */}
-      <nav aria-label="Panels" className="flex gap-1 border-b px-3 py-1.5 lg:hidden">
+      <nav aria-label="Panels" className="flex gap-1.5 overflow-x-auto border-b-2 border-edge-soft px-3 py-2 lg:hidden">
         {(
           [
             ["talk", "Talk", mode === "voice" ? Mic : MessageSquare],
@@ -180,7 +207,7 @@ export function TalkApp() {
             ["inspector", "How it works", ScanSearch],
           ] as const
         ).map(([id, label, Icon]) => (
-          <Button key={id} variant={pane === id ? "secondary" : "ghost"} size="sm" aria-pressed={pane === id} onClick={() => setPane(id)}>
+          <Button key={id} variant={pane === id ? "secondary" : "ghost"} size="sm" className="shrink-0" aria-pressed={pane === id} onClick={() => setPane(id)}>
             <Icon /> {label}
           </Button>
         ))}
@@ -198,9 +225,9 @@ export function TalkApp() {
 
         <section aria-label="Conversation with Pearl" className={cn("min-h-0 flex-col gap-3", pane === "talk" ? "flex" : "hidden", "lg:flex")}>
           <h1 className="sr-only">Talk to Pearl</h1>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
             <PersonaSwitcher value={persona} onChange={onPersona} disabled={live || chat.busy} compact className="min-w-0 flex-1" />
-            <div role="tablist" aria-label="Voice or chat" className="flex shrink-0 rounded-full border bg-card p-0.5">
+            <div role="tablist" aria-label="Voice or chat" className="brick flex shrink-0 self-start rounded-full bg-card p-1 [--brick-depth:3px] sm:self-auto">
               {(["voice", "chat"] as const).map((m) => (
                 <button
                   key={m}
@@ -210,7 +237,7 @@ export function TalkApp() {
                   data-testid={`mode-${m}`}
                   onClick={() => void switchMode(m)}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm transition-colors",
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold transition-colors",
                     mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -221,7 +248,7 @@ export function TalkApp() {
             </div>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border bg-card/40 p-3 bg-pearl-glow">
+          <div className="brick-soft flex min-h-0 flex-1 flex-col rounded-[1.75rem] bg-card p-3">
             {mode === "voice" && (
               <div className="shrink-0 py-2">
                 <VoiceStage
@@ -235,6 +262,7 @@ export function TalkApp() {
                   audioBlocked={voice.audioBlocked}
                   engine={engine}
                   waiting={waiting}
+                  expression={expression}
                   suggestion={suggestion}
                   onExplain={() => setExplaining(true)}
                   onCancelExplain={() => setExplaining(false)}
@@ -261,7 +289,7 @@ export function TalkApp() {
                     <TryChips onPick={onChip} disabled={chat.busy} label="" className="mt-2" />
                   </details>
                 )}
-                <Composer onSend={(t) => void chat.send(t)} busy={chat.busy} />
+                <Composer onSend={(t) => void chat.send(t)} busy={chat.busy} expression={expression} />
               </div>
             )}
           </div>
@@ -273,7 +301,7 @@ export function TalkApp() {
           aria-label="Inspector"
           className={cn("min-h-0 flex-col", pane === "inspector" ? "flex" : "hidden", inspectorOpen ? "lg:flex" : "lg:hidden")}
         >
-          <h2 className="mb-2 text-sm font-semibold">See how it works</h2>
+          <h2 className="mb-2 font-display text-lg font-bold uppercase">See how it works</h2>
           <Inspector timeline={state.timeline} latencies={state.latencies} className="flex-1" />
         </aside>
       </main>

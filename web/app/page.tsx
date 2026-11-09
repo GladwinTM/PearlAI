@@ -4,6 +4,8 @@ import { BootGate } from "@/components/boot/boot-gate";
 import { Hero } from "@/components/landing/hero";
 import { HowItWorks } from "@/components/landing/how-it-works";
 import { LocalBadges } from "@/components/landing/local-badges";
+import { TryPearl } from "@/components/landing/try-pearl";
+import { ToothMark } from "@/components/pearl/tooth-mark";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { GITHUB_URL } from "@/lib/config";
@@ -22,16 +24,18 @@ export default function Home() {
             </a>
           </Button>
         )}
-        <Button asChild size="sm" className="rounded-full">
+        <Button asChild size="sm">
           <Link href="/talk?mode=voice">Try it</Link>
         </Button>
       </SiteHeader>
-      <main className="flex-1 bg-pearl-glow">
+      <main className="flex-1">
         <Hero />
+        <TryPearl />
         <HowItWorks />
         <LocalBadges />
       </main>
-      <footer className="border-t py-6 text-center text-sm text-muted-foreground">
+      <footer className="border-t-2 border-edge-soft py-8 text-center text-sm text-muted-foreground">
+        <ToothMark face="wink" className="mx-auto mb-2 h-10 w-auto" />
         SmileDesk is a portfolio demo. Pearl Dental Care, its dentists and patients are fictional.
       </footer>
     </BootGate>

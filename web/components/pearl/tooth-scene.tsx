@@ -10,7 +10,7 @@ import { type RefObject, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
-import { frontPoint, sidePoint, toothGeometry } from "./tooth-geometry";
+import { frontPoint, loadToothGeometry, sidePoint } from "./tooth-geometry";
 import type { ToothExpression, ToothMode } from "./types";
 
 export interface ToothSceneProps {
@@ -21,6 +21,8 @@ export interface ToothSceneProps {
   active: boolean;
   /** Reduced motion: a still pose per state, rendered only when something changes. */
   still: boolean;
+  /** Cap the frame rate (e.g. 30 during a voice call, leaving CPU for speech detection). */
+  maxFps?: number;
   onReady?: () => void;
 }
 
@@ -310,7 +312,8 @@ function Pearl({ mode, expression, level, still, onReady }: Omit<ToothSceneProps
       highlight: new THREE.MeshBasicMaterial({ color: "#ffffff" }),
     };
 
-    const body = new THREE.Mesh(toothGeometry(), mats.body);
+    // The body mesh arrives from a Web Worker (see loadToothGeometry); until then Pearl stays hidden behind the poster.
+    const body = new THREE.Mesh(new THREE.BufferGeometry(), mats.body);
 
     // Eyes: an anchor on the surface → a gaze group that shifts → the glossy bead + its highlight.
     const eyes = ([-1, 1] as const).map((side) => {
@@ -382,6 +385,20 @@ function Pearl({ mode, expression, level, still, onReady }: Omit<ToothSceneProps
 
     return { colors, mats, body, eyes, winkArc, squintL, squintR, blush, smile, wavy, talk, talkInner, arms, stars, heart, starGeo };
   }, []);
+
+  const bodyReady = useRef(false);
+  useEffect(() => {
+    let alive = true;
+    void loadToothGeometry().then((g) => {
+      if (!alive) return;
+      built.body.geometry = g; // shared and cached for the page: never disposed here
+      bodyReady.current = true;
+      invalidate();
+    });
+    return () => {
+      alive = false;
+    };
+  }, [built, invalidate]);
 
   // Theme switches may change the tokens.
   useEffect(() => {
@@ -568,7 +585,8 @@ function Pearl({ mode, expression, level, still, onReady }: Omit<ToothSceneProps
     built.heart.scale.setScalar(a.heart * (0.6 + (still ? 0 : 0.03 * Math.sin(t * 4))));
     built.heart.rotation.set(0.15, Math.sin(t * 1.5) * 0.15, 0);
 
-    if (!a.readied) {
+    g.visible = bodyReady.current;
+    if (!a.readied && bodyReady.current) {
       a.readied = true;
       onReady?.();
     }
@@ -603,6 +621,16 @@ function Pearl({ mode, expression, level, still, onReady }: Omit<ToothSceneProps
   );
 }
 
+/** Renders at most `fps` frames a second (the Canvas runs on demand). */
+function Throttle({ fps }: { fps: number }) {
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    const id = setInterval(() => invalidate(), 1000 / fps);
+    return () => clearInterval(id);
+  }, [fps, invalidate]);
+  return null;
+}
+
 /** Soft studio reflections, generated in code (no HDR download). */
 function Studio() {
   const gl = useThree((s) => s.gl);
@@ -623,13 +651,14 @@ function Studio() {
   return null;
 }
 
-export default function ToothScene({ active, still, ...rest }: ToothSceneProps) {
+export default function ToothScene({ active, still, maxFps, ...rest }: ToothSceneProps) {
+  const throttled = !still && !!maxFps;
   const shadow = useMemo(() => (typeof window === "undefined" ? "#030e50" : `#${readColors().shadow.getHexString(THREE.SRGBColorSpace)}`), []);
   return (
     <Canvas
       aria-hidden
       dpr={[1, 2]}
-      frameloop={active ? (still ? "demand" : "always") : "never"}
+      frameloop={active ? (still || throttled ? "demand" : "always") : "never"}
       camera={{ position: [0, 0.15, 7.4], fov: 30 }}
       gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
       onCreated={({ camera }) => camera.lookAt(0, -0.12, 0)}
@@ -639,6 +668,7 @@ export default function ToothScene({ active, still, ...rest }: ToothSceneProps) 
       <directionalLight position={[-3, 4, 5]} intensity={1.5} />
       <directionalLight position={[3.5, 2, -4]} intensity={0.9} color="#cfe0ff" />
       <Studio />
+      {active && throttled && <Throttle fps={maxFps} />}
       <Pearl {...rest} still={still} />
       <ContactShadows position={[0, -1.62, 0]} scale={4.5} blur={2.6} opacity={0.32} far={2.6} resolution={256} color={shadow} />
     </Canvas>

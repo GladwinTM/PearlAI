@@ -53,9 +53,11 @@ export function Transcript({ messages, empty, className }: Props) {
           {messages.map((m) => (
             <motion.li
               key={m.id}
-              initial={reduce ? false : { opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
+              // Messages pop in with a quick spring from the speaker's side.
+              initial={reduce ? false : { opacity: 0, y: 10, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: "spring", stiffness: 520, damping: 30 }}
+              style={{ transformOrigin: m.role === "user" ? "100% 100%" : "0% 100%" }}
               className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
             >
               {m.role === "user" ? <UserBubble m={m} /> : <PearlBubble m={m} />}
@@ -70,7 +72,7 @@ export function Transcript({ messages, empty, className }: Props) {
 function UserBubble({ m }: { m: Message }) {
   const text = (m.parts[0] as Extract<Part, { kind: "text" }>)?.text ?? "";
   return (
-    <div className={cn("max-w-[85%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-primary-foreground", m.interim && "opacity-70")}>
+    <div className={cn("brick max-w-[85%] rounded-[1.25rem] rounded-br-md bg-primary px-3.5 py-2 text-primary-foreground [--brick-depth:3px]", m.interim && "opacity-70")}>
       <span className="sr-only">You said: </span>
       {m.channel === "voice" && <Mic className="mr-1.5 inline size-3.5 -translate-y-px opacity-80" aria-hidden />}
       {text}
@@ -92,8 +94,8 @@ function PearlBubble({ m }: { m: Message }) {
           <div
             key={i}
             className={cn(
-              "rounded-2xl rounded-bl-md bg-card px-3.5 py-2 shadow-sm ring-1 ring-border",
-              p.retracted && "bg-transparent text-muted-foreground shadow-none",
+              "brick-soft rounded-[1.25rem] rounded-bl-md bg-card px-3.5 py-2 [--brick-depth:3px]",
+              p.retracted && "border-dashed bg-transparent text-muted-foreground shadow-none",
             )}
           >
             <span className="sr-only">Pearl{p.retracted ? " (retracted)" : ""}: </span>
@@ -123,12 +125,12 @@ function ToolPill({ p }: { p: Extract<Part, { kind: "tool" }> }) {
     <span
       data-testid="tool-pill"
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs",
-        running ? "border-primary/40 bg-accent text-accent-foreground" : p.ok ? "text-muted-foreground" : "border-destructive/40 text-destructive",
+        "inline-flex items-center gap-1.5 rounded-full border-2 px-2.5 py-0.5 text-xs font-medium",
+        running ? "border-primary/50 bg-accent text-accent-foreground" : p.ok ? "border-edge-soft bg-card text-muted-foreground" : "border-destructive/50 text-destructive",
       )}
     >
       {running ? <Loader2 className="size-3 animate-spin" aria-hidden /> : p.ok ? <Check className="size-3" aria-hidden /> : <X className="size-3" aria-hidden />}
-      {running ? `${TOOL_LABEL[p.name] ?? p.name}…` : (PAST[p.name] ?? p.name)}
+      {running ? `${TOOL_LABEL[p.name] ?? p.name}…` : p.ok ? (PAST[p.name] ?? p.name) : `${TOOL_LABEL[p.name] ?? p.name}: not done`}
       {p.auto && <span className="text-muted-foreground">(caller ID)</span>}
       {p.ms != null && <span className="tabular-nums text-muted-foreground">· {p.ms} ms</span>}
     </span>
@@ -141,7 +143,7 @@ function Notice({ p }: { p: Extract<Part, { kind: "notice" }> }) {
     <span
       role={p.tone === "error" ? "alert" : undefined}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs",
+        "inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs font-medium",
         p.tone === "safety" && "bg-destructive/10 text-destructive",
         p.tone === "error" && "bg-destructive/10 text-destructive",
         p.tone === "info" && "bg-muted text-muted-foreground",
@@ -154,9 +156,9 @@ function Notice({ p }: { p: Extract<Part, { kind: "notice" }> }) {
 
 function TypingDots() {
   return (
-    <span className="inline-flex items-center gap-1 rounded-2xl rounded-bl-md bg-card px-3.5 py-3 ring-1 ring-border" aria-label="Pearl is typing">
+    <span className="brick-soft inline-flex items-center gap-1 rounded-[1.25rem] rounded-bl-md bg-card px-3.5 py-3 [--brick-depth:3px]" aria-label="Pearl is typing">
       {[0, 1, 2].map((i) => (
-        <span key={i} className="size-1.5 animate-bounce rounded-full bg-muted-foreground/70" style={{ animationDelay: `${i * 0.15}s` }} />
+        <span key={i} className="size-2 animate-bounce rounded-full bg-primary" style={{ animationDelay: `${i * 0.15}s` }} />
       ))}
     </span>
   );

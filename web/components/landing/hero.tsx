@@ -3,65 +3,75 @@
 import { MessageSquare, Mic } from "lucide-react";
 import { motion } from "motion/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
-import { Orb } from "@/components/orb/orb";
-import { PersonaSwitcher } from "@/components/talk/persona-switcher";
-import { TryChips } from "@/components/talk/try-chips";
+import { Tooth } from "@/components/pearl/tooth";
 import { Button } from "@/components/ui/button";
-import { usePersona } from "@/lib/use-persona";
+import { BACKEND } from "@/lib/config";
+
+import { Stickers } from "./stickers";
+
+// Same props on server and client (no reduced-motion branching in render: it would break hydration).
+// MotionConfig reducedMotion="user" in the root layout drops the movement for people who ask for less motion.
+const word = (delay: number) => ({
+  initial: { y: "0.35em", rotate: -4 },
+  animate: { y: 0, rotate: 0 },
+  transition: { type: "spring" as const, stiffness: 380, damping: 22, delay },
+});
+// Movement only (no fade from 0): the text is painted at first render, which keeps Largest Contentful Paint fast.
+const rise = (delay: number) => ({ initial: { y: 14 }, animate: { y: 0 }, transition: { duration: 0.35, delay } });
+
+const WHERE = BACKEND === "python" ? "all running on this laptop" : "and her voice runs right in your browser";
 
 export function Hero() {
-  const [persona, setPersona] = usePersona();
-  const router = useRouter();
-  // Same props on server and client (no reduced-motion branching in render: it would break hydration).
-  // MotionConfig reducedMotion="user" in the root layout drops the movement for people who ask for less motion.
-  const rise = (delay: number) => ({ initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5, delay } });
-
   return (
-    <section className="mx-auto grid w-full max-w-6xl items-center gap-8 px-4 pt-8 pb-16 md:grid-cols-[1.1fr_0.9fr] md:pt-16">
-      <div className="order-2 md:order-1">
-        <motion.p {...rise(0)} className="text-sm font-medium text-primary">
+    <section aria-labelledby="hero-title" className="on-sky relative isolate overflow-hidden border-b-2 border-edge bg-sky studs text-deep">
+      <Stickers />
+      <div className="relative mx-auto flex min-h-[calc(100svh-4rem)] max-w-[1400px] flex-col items-center justify-center px-4 pt-8 pb-12 text-center">
+        <motion.p {...rise(0)} className="brick inline-flex items-center gap-2 rounded-full bg-yellow px-4 py-1.5 text-sm font-bold [--brick-depth:3px]">
           Pearl Dental Care · Coimbatore
         </motion.p>
-        <motion.h1 {...rise(0.05)} className="mt-3 text-4xl font-semibold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-          Meet Pearl, the AI front desk that never puts you on hold
-        </motion.h1>
-        <motion.p {...rise(0.1)} className="mt-4 max-w-xl text-lg text-muted-foreground text-pretty">
-          Talk to her like a receptionist. She books, moves and cancels real appointments, answers clinic questions, and escalates
-          anything urgent to a human, all running on this laptop.
+
+        <div className="relative mt-4 w-full">
+          <h1
+            id="hero-title"
+            className="font-display text-[clamp(5.2rem,19vw,17rem)] leading-[0.8] font-bold tracking-[-0.02em] uppercase text-brick"
+          >
+            <motion.span {...word(0.05)} className="block">
+              Meet
+            </motion.span>{" "}
+            <motion.span {...word(0.15)} className="mt-[0.42em] block">
+              Pearl
+            </motion.span>
+          </h1>
+          {/* Pearl sits between (and over) the two words. */}
+          <motion.div
+            className="pointer-events-none absolute top-1/2 left-1/2 w-[clamp(140px,34vw,470px)] -translate-x-1/2 -translate-y-[47%]"
+            initial={{ opacity: 0, scale: 0.4, y: -60 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 260, damping: 13, delay: 0.3 }}
+          >
+            <Tooth mode="idle" label="Pearl, the AI receptionist: a smiling cartoon tooth" />
+          </motion.div>
+        </div>
+
+        <motion.p {...rise(0.35)} className="mt-6 max-w-xl text-lg font-medium text-pretty sm:text-xl">
+          The AI front desk that never puts you on hold. She books, moves and cancels real appointments, answers clinic questions,
+          and escalates anything urgent to a human, {WHERE}.
         </motion.p>
 
-        <motion.div {...rise(0.15)} className="mt-7 flex flex-wrap gap-3">
-          <Button asChild size="lg" className="h-11 rounded-full px-6 text-base">
+        <motion.div {...rise(0.45)} className="mt-7 flex flex-wrap justify-center gap-4">
+          <Button asChild size="lg">
             <Link href="/talk?mode=voice" data-testid="cta-voice">
               <Mic /> Talk to Pearl
             </Link>
           </Button>
-          <Button asChild size="lg" variant="outline" className="h-11 rounded-full px-6 text-base">
+          <Button asChild size="lg" variant="outline">
             <Link href="/talk?mode=chat" data-testid="cta-chat">
               <MessageSquare /> Prefer to chat?
             </Link>
           </Button>
         </motion.div>
-
-        <motion.div {...rise(0.2)} className="mt-8 space-y-6">
-          <PersonaSwitcher value={persona} onChange={setPersona} />
-          <TryChips
-            label="Things to try (opens a chat)"
-            onPick={(p) => router.push(`/talk?mode=chat&prompt=${encodeURIComponent(p)}`)}
-          />
-        </motion.div>
       </div>
-
-      <motion.div
-        className="order-1 mx-auto w-full max-w-[220px] sm:max-w-xs md:order-2 md:max-w-md"
-        initial={{ opacity: 0, scale: 0.92 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
-      >
-        <Orb mode="idle" label="Pearl, the AI receptionist" />
-      </motion.div>
     </section>
   );
 }

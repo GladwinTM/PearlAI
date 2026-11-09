@@ -4,7 +4,7 @@ import { Check, CircleAlert, Loader2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 
-import { PearlMark } from "@/components/brand/logo";
+import { ToothMark } from "@/components/pearl/tooth-mark";
 import { Button } from "@/components/ui/button";
 import type { HealthComponent } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -63,39 +63,34 @@ export function BootGate({ children }: { children: ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="boot-title"
-            className="fixed inset-0 z-50 grid place-items-center bg-background/95 px-4 backdrop-blur-sm bg-pearl-glow"
+            className="on-sky studs fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-sky px-4 py-8 text-deep"
             initial={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: reduce ? 0 : 0.35 } }}
           >
             <div className="w-full max-w-md">
               <div className="mb-6 flex flex-col items-center text-center">
-                <motion.div
-                  animate={{ scale: [1, 1.06, 1] }}
-                  transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  <PearlMark className="size-16 drop-shadow-[0_8px_24px_rgba(42,157,143,0.35)]" />
-                </motion.div>
-                <h1 id="boot-title" className="mt-4 text-xl font-semibold tracking-tight">
+                <BrushingTooth sad={unreachable || degraded} />
+                <h1 id="boot-title" className="mt-4 font-display text-3xl leading-none font-bold uppercase">
                   {unreachable ? "Can't reach Pearl's server" : degraded ? "Some services need attention" : "Waking Pearl up"}
                 </h1>
-                <p className="mt-1 text-sm text-muted-foreground" aria-live="polite">
+                <p className="mt-2 text-sm font-medium" aria-live="polite">
                   {unreachable
                     ? "The agent API isn't responding."
                     : health
-                      ? `${health.warmup.ready} of ${health.warmup.total} ready${health.warmup.elapsed_s != null ? ` · ${health.warmup.elapsed_s}s` : ""}. Everything runs on this machine.`
+                      ? `${health.warmup.ready} of ${health.warmup.total} ready${health.warmup.elapsed_s != null ? ` · ${health.warmup.elapsed_s}s` : ""}.${health.all_local ? " Everything runs on this machine." : ""}`
                       : "Checking services…"}
                 </p>
               </div>
 
               {unreachable ? (
-                <div role="alert" className="rounded-xl border bg-card p-4 text-sm">
+                <div role="alert" className="brick rounded-[1.5rem] bg-card p-4 text-sm text-foreground">
                   <p>
                     Start it with <code className="rounded bg-muted px-1.5 py-0.5 font-mono">make agent</code> (or{" "}
                     <code className="rounded bg-muted px-1.5 py-0.5 font-mono">make dev</code> for everything). This page retries on its own.
                   </p>
                 </div>
               ) : (
-                <ul className="divide-y rounded-xl border bg-card" aria-label="Service warmup">
+                <ul className="brick divide-y-2 divide-edge-soft overflow-hidden rounded-[1.5rem] bg-card text-foreground" aria-label="Service warmup">
                   {ORDER.map((k) => health?.components[k])
                     .filter((c): c is HealthComponent => Boolean(c))
                     .map((c, i) => (
@@ -176,5 +171,41 @@ function BootRow({ c, index }: { c: HealthComponent; index: number }) {
         <span className="text-xs tabular-nums text-muted-foreground">{(c.duration_ms / 1000).toFixed(1)}s</span>
       )}
     </motion.li>
+  );
+}
+
+/** Pearl brushing her teeth while the services warm up (a worried face if something is wrong). */
+function BrushingTooth({ sad }: { sad: boolean }) {
+  return (
+    <div className="relative h-28 w-28" aria-hidden>
+      <motion.div animate={sad ? { rotate: [0, -3, 3, 0] } : { y: [0, -3, 0] }} transition={{ duration: sad ? 0.5 : 0.9, repeat: Infinity, ease: "easeInOut" }}>
+        <ToothMark face={sad ? "worried" : "sleepy"} className="h-28 w-auto drop-shadow-[0_5px_0_var(--edge)]" />
+      </motion.div>
+      {!sad && (
+        <>
+          <motion.svg
+            viewBox="0 0 120 34"
+            className="absolute top-[52%] -right-9 h-6 w-20"
+            animate={{ x: [0, -14, 0], rotate: [-8, -2, -8] }}
+            transition={{ duration: 0.45, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <rect x="34" y="16" width="84" height="12" rx="6" fill="var(--coral)" stroke="var(--edge)" strokeWidth="2.5" />
+            <rect x="2" y="18" width="36" height="9" rx="4.5" fill="var(--card)" stroke="var(--edge)" strokeWidth="2.5" />
+            {[6, 13, 20, 27].map((x) => (
+              <rect key={x} x={x} y="3" width="5" height="15" rx="2.5" fill="var(--card)" stroke="var(--edge)" strokeWidth="1.8" />
+            ))}
+          </motion.svg>
+          {[0, 1, 2].map((i) => (
+            <motion.span
+              key={i}
+              className="absolute size-3 rounded-full border-2 border-edge bg-card"
+              style={{ left: `${30 + i * 18}%`, top: "58%" }}
+              animate={{ y: [0, -40], opacity: [0, 1, 0], scale: [0.4, 1, 0.8] }}
+              transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.45, ease: "easeOut" }}
+            />
+          ))}
+        </>
+      )}
+    </div>
   );
 }

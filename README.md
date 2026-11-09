@@ -25,7 +25,7 @@ Both share the prompt, the code guards, the database and the UI, and parity test
 ```
 Browser ── mic → Silero VAD (WASM) ── utterance WAV ──▶ /api/transcribe ──▶ Groq Whisper
         ◀─ Kokoro TTS (Web Worker) ◀── streamed reply ── /api/chat: turn loop + 9 tools + guards ──▶ Groq gpt-oss-20b
-           orb · captions · Inspector · live calendar      (Vercel functions)  └─▶ Supabase: data, agent state, FAQ search
+           Pearl 3D · captions · Inspector · calendar      (Vercel functions)  └─▶ Supabase: data, agent state, FAQ search
 ```
 
 **Local (full):**
@@ -145,11 +145,13 @@ The bottleneck is the 8B model's generation speed while the machine is swapping.
 
 ## The UI
 
-- **Boot screen.** An honest checklist that polls `/api/health` (database, LLM, embeddings, knowledge base, Whisper, Kokoro), with the fix shown if something is down.
-- **Landing.** A canvas "pearl" orb, a persona switcher (each persona carries a caller ID, so nobody types a phone number), and "things to try" chips that open a chat.
+- **Look.** A bright toy-brick style: Fredoka headlines, chunky cards with solid "brick" shadows that press on click, and a Lego palette (sky, royal blue, navy, yellow, coral, lime, lavender, pink) defined as oklch tokens in `web/app/globals.css`, light and dark, all text pairs WCAG AA.
+- **Pearl is a 3D clay tooth** (`web/components/pearl`, three.js via react-three-fiber), built in code: her body is a signed distance field meshed in a Web Worker, with a glossy face, blush and noodle arms in cartoon gloves. Idle she floats and follows your cursor; listening she leans in and squashes with your mic; thinking, sparkles orbit her; speaking, her mouth moves with her voice. She winks with a peace sign when a booking is confirmed, looks worried for urgent symptoms and holds a heart when you say thanks. Lazy-loaded, paused off-screen, capped at 30 fps during calls, still poses for reduced motion, and an SVG poster when WebGL is missing. Every state is on `/dev/tooth` (dev only).
+- **Boot screen.** Pearl brushing her teeth over an honest checklist that polls `/api/health` (database, LLM, embeddings, knowledge base, Whisper, Kokoro), with the fix shown if something is down.
+- **Landing.** A giant "MEET PEARL" headline with Pearl between the words and stickers that drift with the cursor, tall persona cards (each persona carries a caller ID, so nobody types a phone number), and "things to try" stickers that open a chat.
 - **`/talk`.** Three panes: a live week calendar, the conversation, and the Inspector.
   - **Voice and chat are one conversation.** Switch mid-way: the voice call continues the chat (same tool context and history; Pearl says she has the chat in front of her), and chat continues after the call.
-  - **The orb** breathes when idle, follows your mic level while listening, swirls while thinking and follows Pearl's voice while she speaks.
+  - **Pearl** fills the voice stage; in chat a small static tooth by the composer reacts the same way. Messages pop in, and new bookings snap into the calendar.
   - **The Inspector** shows every tool call with its JSON result, guard and safety events, and a stacked latency bar per turn (STT / LLM first token / TTS first byte).
   - **The calendar** polls every 2 s during a conversation, jumps to the week of a new booking and animates it in. Fixtures are greyed and names are masked.
 - Dark mode follows the system (with a toggle), the layout works on phones (the panes become tabs), `prefers-reduced-motion` is respected, and Lighthouse accessibility on the landing page and `/talk` is 100.

@@ -122,7 +122,7 @@ export function WeekCalendar({ live, refreshKey = 0, focusDate, className }: Pro
     <section aria-label="Live calendar" className={cn("flex min-h-0 flex-col gap-3", className)}>
       <div className="flex items-center gap-2">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold">Live calendar</h2>
+          <h2 className="font-display text-lg leading-tight font-bold uppercase">Live calendar</h2>
           <p className="text-xs text-muted-foreground">
             {RANGE_FMT.format(days[0])} – {RANGE_FMT.format(days[5])}
             {live && (
@@ -145,9 +145,9 @@ export function WeekCalendar({ live, refreshKey = 0, focusDate, className }: Pro
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       {!data ? (
-        <Skeleton className="h-[360px] w-full rounded-xl" />
+        <Skeleton className="h-[360px] w-full rounded-[1.5rem]" />
       ) : (
-        <div className="rounded-xl border bg-card p-2">
+        <div className="brick-soft rounded-[1.5rem] bg-card p-2.5">
           <div className="grid grid-cols-[3.25rem_repeat(6,minmax(0,1fr))] gap-1">
             <span />
             {days.map((d) => {
@@ -160,9 +160,9 @@ export function WeekCalendar({ live, refreshKey = 0, focusDate, className }: Pro
                   aria-pressed={iso === selectedDay}
                   aria-label={`${DAY_FMT.format(d)} ${d.getDate()}: list appointments`}
                   className={cn(
-                    "rounded-md py-1 text-center text-[0.7rem] leading-tight transition-colors hover:bg-accent",
-                    iso === today && "font-semibold text-primary",
-                    iso === selectedDay && "bg-accent",
+                    "rounded-lg py-1 text-center text-[0.7rem] leading-tight font-medium transition-colors hover:bg-accent",
+                    iso === today && "font-bold text-primary",
+                    iso === selectedDay && "bg-yellow text-deep",
                   )}
                 >
                   {DAY_FMT.format(d)}
@@ -196,7 +196,7 @@ export function WeekCalendar({ live, refreshKey = 0, focusDate, className }: Pro
 
       <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[0.7rem] text-muted-foreground" aria-label="Legend">
         <li className="flex items-center gap-1">
-          <span className="size-2 rounded-sm bg-primary" aria-hidden /> booked by Pearl
+          <span className="size-2.5 rounded-[3px] bg-primary" aria-hidden /> booked by Pearl
         </li>
         <li className="flex items-center gap-1">
           <span className="size-2 rounded-sm bg-chart-2/60" aria-hidden /> other bookings
@@ -210,7 +210,7 @@ export function WeekCalendar({ live, refreshKey = 0, focusDate, className }: Pro
       </ul>
 
       {selectedDay && (
-        <div className="rounded-xl border bg-card p-3" aria-live="polite">
+        <div className="brick-soft rounded-[1.25rem] bg-card p-3 [--brick-depth:3px]" aria-live="polite">
           <h3 className="mb-2 text-xs font-semibold">
             {new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "short" }).format(new Date(`${selectedDay}T12:00:00`))}
           </h3>
@@ -273,7 +273,7 @@ function DentistRow({
         return (
           <div
             key={iso}
-            className="relative h-28 overflow-hidden rounded-md bg-[repeating-linear-gradient(45deg,var(--muted)_0_3px,transparent_3px_7px)] ring-1 ring-border/70"
+            className="relative h-28 overflow-hidden rounded-lg bg-[repeating-linear-gradient(45deg,var(--muted)_0_3px,transparent_3px_7px)] ring-1 ring-border"
             title={hours ? `${name}: ${hours[0]}–${hours[1]}` : `${name} is off`}
           >
             {hours && (
@@ -295,14 +295,15 @@ function DentistRow({
                   <motion.div
                     key={a.id}
                     data-testid={byPearl ? "appt-pearl" : "appt"}
-                    initial={reduce ? false : { opacity: 0, scale: 0.6 }}
-                    animate={{ opacity: 1, scale: 1 }}
+                    // A new booking drops in and snaps into place like a brick clicking onto a baseplate.
+                    initial={reduce ? false : { opacity: 0, y: -14, scaleY: 1.25 }}
+                    animate={{ opacity: 1, y: 0, scaleY: 1 }}
                     exit={{ opacity: 0, scale: 0.6 }}
-                    transition={{ type: "spring", stiffness: 380, damping: 24 }}
+                    transition={{ type: "spring", stiffness: 700, damping: 18 }}
                     className={cn(
-                      "absolute inset-x-0.5 rounded-[3px]",
+                      "absolute inset-x-0.5 rounded-[4px]",
                       byPearl ? "bg-primary" : a.is_fixture ? "bg-muted-foreground/35" : "bg-chart-2/60",
-                      isFresh && "z-10 ring-2 ring-primary ring-offset-1 ring-offset-card",
+                      isFresh && "z-10 shadow-[0_2px_0_var(--edge)] ring-2 ring-edge",
                     )}
                     style={{ top: pct(Math.max(a.start, open)), height: `max(3px, calc(${pct(a.end)} - ${pct(Math.max(a.start, open))} - 1px))` }}
                     title={`${a.appointment_name} · ${fmtTime(a.start)}–${fmtTime(a.end)} · ${a.patient_display}${a.is_fixture ? " (demo fixture)" : ""}`}
