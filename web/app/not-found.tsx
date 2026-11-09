@@ -15,7 +15,7 @@ export default function NotFound() {
         </p>
         <div className="mt-6 flex justify-center gap-2">
           <Button asChild>
-            <Link href="/talk">Talk to Pearl</Link>
+            <Link href="/talk?mode=voice">Talk to Pearl</Link>
           </Button>
           <Button asChild variant="outline">
             <Link href="/">Home</Link>

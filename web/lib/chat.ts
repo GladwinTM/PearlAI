@@ -20,6 +20,7 @@ export interface ChatRequest {
   message: string;
   conversation_id?: string | null;
   persona?: string | null;
+  channel?: "chat" | "voice";
 }
 
 /** POST /api/chat and parse the Server-Sent Events stream. */

@@ -13,8 +13,25 @@ It's a **portfolio project for recruiters**, so it has to:
 2. **Be easy to try.** Persona buttons, suggested prompts and no typing of phone numbers.
 3. **Show the engineering.** Live tool calls, per-stage latency, a real calendar updating, and a public eval dashboard.
 
+### Two versions (updated after M4)
+SmileDesk ships as **two versions of the same product**, sharing the prompt, the guards, the database and the UI:
+
+| | **Live demo (serverless)**: what recruiters open | **Local (full)**: what runs on the Mac |
+|---|---|---|
+| Hosting | Vercel (web + API routes) + Supabase, **$0/month**, no server | `make dev-local` on an Apple Silicon Mac |
+| Agent | TypeScript port in `web/lib/agent` (Next.js route handlers) | Python in `agent/` (FastAPI) |
+| LLM | Groq free tier, `gpt-oss-20b` with per-model fallbacks | Ollama `qwen3:8b` |
+| Voice | **In the browser**: Silero VAD → Groq Whisper (per utterance) → Kokoro in a Web Worker | Pipecat server pipeline over WebRTC (MLX Whisper, Kokoro) |
+| FAQ search | Postgres full-text search | pgvector + embeddings |
+
+Why: a server-side voice pipeline needs an always-on server, and no free host fits one (~1.4 GB RAM). Moving audio into
+the browser leaves only short request/response work, which free serverless functions handle. The two agents are kept
+identical by parity tests (the TypeScript port must reproduce the Python agent's outputs).
+
 ### Hard constraints
-- **Everything runs locally** on an Apple Silicon Mac (M5, 16 GB RAM). No paid APIs and no cloud calls in the default setup.
+- **The local version runs entirely locally** on an Apple Silicon Mac (M5, 16 GB RAM): no paid APIs and no cloud calls.
+  **The live demo costs nothing**: free tiers only (Vercel Hobby, Supabase free, Groq free). Browser voice uses plain
+  HTTPS requests, so no TURN server or always-on host is needed.
 - **English only.**
 - **Voice runs in the browser only.** No phone numbers or telephony.
 - **Every model provider can be swapped through env settings** (LLM, STT, TTS, embeddings), so the app can be deployed later with free hosted APIs. Default = local.
@@ -50,6 +67,23 @@ Authentication, a real admin panel, payments, SMS or email reminders, multiple l
  └───────────────────────┘      └───────────────────────────────┘
  Local, in-process: faster-whisper / MLX Whisper (STT), Kokoro (TTS)
 ```
+
+**Live demo (serverless) architecture:**
+
+```
+ Browser (Next.js page)                                   Vercel functions (same origin, /api/*)
+ ┌─────────────────────────────────────────┐   HTTP      ┌───────────────────────────────────────────┐
+ │ mic → Silero VAD (WASM) → utterance WAV  │ ──────────▶ │ /api/transcribe → Groq Whisper             │
+ │ Kokoro TTS (Web Worker, WebGPU/WASM)     │ ◀── SSE ─── │ /api/chat: turn loop + tools + guards (TS) │
+ │ orb, captions, Inspector, live calendar  │             │ /api/health, /api/calendar, /api/demo/reset│
+ └─────────────────────────────────────────┘             └──────────┬──────────────────┬─────────────┘
+                                                                     │ service role     │ OpenAI-compatible
+                                                          Supabase (Postgres, state,    Groq (gpt-oss-20b →
+                                                          full-text FAQ search)         120b → qwen3.8 fallbacks)
+```
+Serverless functions keep no memory, so each conversation's agent state (history, patient handles, offered slots,
+phones the caller gave) is stored in `conversations.agent_state` and reloaded every turn — never sent to the browser,
+so the guards can't be tampered with.
 
 **Key decision:** the **browser never talks to Supabase directly**. All data goes through the agent API, so the service-role key stays on the server and RLS stays locked down. This is already set up in the migration.
 
@@ -93,9 +127,10 @@ smiledesk/
 │   ├── scripts/ingest_kb.py     embeds kb_documents
 │   └── tests/
 └── web/                     ← Next.js (App Router, TypeScript)
-    ├── app/  (page.tsx, talk/, evals/, how-it-works/)
+    ├── app/  (page.tsx, talk/, evals/, how-it-works/, api/ ← serverless agent routes)
     ├── components/  (orb/, inspector/, calendar/, chat/, boot/, ui/)
-    └── lib/  (api.ts, pipecat.ts, personas.ts)
+    └── lib/  (api.ts, pipecat.ts, personas.ts, use-browser-voice.ts, browser-tts.ts,
+              agent/ ← TypeScript port of the agent: core, tools, clock, safety, grounding, prompts)
 ```
 
 ---
@@ -251,7 +286,22 @@ A small keyword and regex detector for red-flag symptoms runs on each user messa
 
 ---
 
-## 7. Voice pipeline (Pipecat)
+## 7. Voice
+
+### 7.1 Live demo: voice in the browser (serverless)
+- **Turn detection** in the browser (Silero VAD via `@ricky0123/vad-web`); each finished utterance is uploaded as a
+  WAV to `/api/transcribe` (Groq Whisper), then sent to `/api/chat` with `channel: "voice"`.
+- **Speech** is Kokoro-82M in a Web Worker (WebGPU when available, else WASM); until its ~90 MB model is cached, the
+  browser's built-in voice speaks so the greeting is instant. The first clause of each reply is spoken while the rest
+  streams; phone numbers are read digit by digit and times naturally ("12:00 PM" → "twelve PM").
+- **Turn-taking:** speech while Pearl talks ducks her volume; she stops only once it is confirmed as real words (not
+  noise, not her own echo). A new request never cancels the one in flight: that reply completes and is saved on the
+  server (the API finishes the turn even if the browser disconnects), then the new request goes out.
+- **"Pearl is looking into it…"** shows whenever a request is being worked on and she isn't speaking, plus the spoken
+  "One moment, let me check." filler on tool rounds.
+- Same guards as the local pipeline (claim guard, safety backstop, grounding), same per-turn latency in the Inspector.
+
+### 7.2 Local version: Pipecat pipeline
 
 ```
 SmallWebRTC input → Silero VAD → STT (Whisper) → user context aggregator
@@ -373,13 +423,22 @@ Each milestone ends with: `make check` green (ruff, pyright, pytest, tsc, eslint
 - Boot screen, landing, orb, `/talk` three-pane layout, Inspector, live calendar, persona switcher, try-chips, reset demo, dark mode, mobile layout.
 - **Accept:** a Playwright smoke test (landing → chat persona → send a chip → see a tool call in the Inspector). Lighthouse accessibility score ≥ 90 on landing. Screenshots of desktop and mobile in light and dark mode.
 
+### M4.5: Serverless live version (done)
+- TypeScript port of the agent (turn loop, 9 tools, guards, caller ID, safety backstop, model fallback) as Next.js route
+  handlers; conversation state in `conversations.agent_state`; full-text FAQ search (`search_kb`).
+- Browser voice (VAD + Groq Whisper + Kokoro in a Web Worker); `make dev` runs it, `make dev-local` runs the Python stack.
+- **Accept:** parity tests (TypeScript reproduces the Python agent's date table, prompt, safety, phone and speech rules),
+  integration tests against local Supabase, Playwright smoke tests, and a browser voice test where a spoken question is
+  transcribed, answered from the FAQ and spoken back.
+
 ### M5: Evals and polish (weekend 5)
 - Eval runner, judge, `/evals` dashboard, prompt v2, the how-it-works page.
 - README with a GIF, architecture, "run locally in 5 commands", and the eval results.
 - **Accept:** two eval runs exist and the dashboard shows the comparison. The README instructions work from a fresh clone.
 
-### M6: Deploy (later)
-Follow `docs/DEPLOY.md`.
+### M6: Deploy
+Live demo: Vercel (root `web/`) + the Supabase project, with Groq keys as Vercel environment variables. Follow
+`docs/DEPLOY.md`. No agent server to host.
 
 ---
 
@@ -388,8 +447,9 @@ Follow `docs/DEPLOY.md`.
 1. Work one milestone at a time. Report real results, including failures. **Stop after each milestone.**
 2. Don't edit `supabase/migrations/20261107000000_init.sql`. Add new migrations.
 3. The service-role key never reaches the browser and is never a `NEXT_PUBLIC_*` variable.
-4. No hardcoded model names or URLs outside `config.py` and `.env.example`.
+4. No hardcoded model names or URLs outside `config.py`, `agent/hosted.env`, `web/lib/agent/config.ts` and `.env.example`.
 5. Ask before installing global tools, before any `git push`, and before anything that leaves the machine.
-6. Keep tool logic in one place (`agent/tools.py`), shared by chat, voice and evals.
+6. Tool logic lives in `agent/tools.py` and its TypeScript port `web/lib/agent/tools.ts`, and nowhere else. Change both
+   together; the parity tests and the shared prompt (`npm run sync-prompts`) keep them identical.
 7. Check current Pipecat, Next.js and shadcn docs before using their APIs. Don't guess.
 8. Commit at the end of each milestone with a clear message, using the **personal** git identity set in this repo (see `docs/DEPLOY.md` §1).

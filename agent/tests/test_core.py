@@ -72,6 +72,9 @@ async def test_caller_id_auto_lookup(clean_db: Client) -> None:
     first = ev[0]
     assert first["type"] == "tool_call" and first["name"] == "lookup_patient" and first.get("auto")
     assert ev[1]["result"]["found"]
+    # Known caller: the number is confirmed in code, once, and kept in Pearl's history.
+    assert ev[-1]["text"].startswith("Hi Ravi, is this you on the number ending 0001?")
+    assert conv.messages[-1]["content"].startswith("Hi Ravi, is this you on the number ending 0001?")
     ev2 = await collect(conv, "Thanks", ScriptedLLM([("Bye", [])]))
     assert "tool_call" not in types(ev2)  # only once per conversation
 
@@ -195,3 +198,40 @@ async def test_safety_backstop_does_not_repeat_what_pearl_said(clean_db: Client)
     assert any(e["type"] == "tool_call" and e["name"] == "escalate_to_human" for e in ev)  # still escalated
     assert ev[-1]["text"].lower().count("staff member") == 1
     rows(clean_db.table("escalations").delete().like("reason", "Safety backstop%").execute())
+
+
+class FailingLLM:
+    model = "down"
+
+    async def stream(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], tool_choice: str):  # type: ignore[no-untyped-def]
+        import httpx2 as httpx
+        from openai import APIConnectionError
+
+        raise APIConnectionError(request=httpx.Request("POST", "http://llm.test/v1/chat/completions"))
+        yield  # pragma: no cover - makes this an async generator
+
+
+async def test_safety_backstop_runs_even_when_the_llm_is_down(clean_db: Client) -> None:
+    ev = await collect(new_conv(), "My face is swollen and I have a fever", FailingLLM())  # pyright: ignore[reportArgumentType]
+    assert any(e["type"] == "error" for e in ev)
+    auto = [e for e in ev if e["type"] == "tool_call" and e["name"] == "escalate_to_human"]
+    assert auto and auto[0]["args"]["urgency"] == "urgent"
+    assert "staff member will call" in ev[-1]["text"].lower()
+    rows(clean_db.table("escalations").delete().like("reason", "Safety backstop%").execute())
+
+
+def test_recover_tool_call_rejected_by_provider_validation() -> None:
+    import httpx2 as httpx
+    from openai import APIError
+
+    from smiledesk.agent.core import recover_failed_tool_call
+
+    body = {"error": {"code": "tool_use_failed", "failed_generation":
+            '{"name": "escalate_to_human", "arguments": {"patient_id": null, "reason": "x", "urgency": "urgent"}}'}}  # fmt: skip
+    e = APIError("bad", httpx.Request("POST", "http://llm.test"), body=body)
+    call = recover_failed_tool_call(e)
+    assert call is not None and call.name == "escalate_to_human" and '"urgency": "urgent"' in call.arguments
+    assert (
+        recover_failed_tool_call(APIError("other", httpx.Request("POST", "http://x"), body={"error": {"code": "x"}}))
+        is None
+    )

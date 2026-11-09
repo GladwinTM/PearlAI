@@ -61,6 +61,43 @@ async def speakable_times(text: str, _text_type: Any = None) -> str:
     return _CLOCK.sub(_say_clock, text)
 
 
+# Phone numbers digit by digit: TTS otherwise reads "9800000001" as "nine billion…". Groups (as written, else 5+5)
+# become short pauses. Short codes with a leading zero ("ending 0001") are spelled out too.
+_PHONE = re.compile(r"\+?\d[\d\s-]{5,}\d")
+_LEADING_ZERO = re.compile(r"\b0\d{2,5}\b")
+
+
+def _spell(digits: str) -> str:
+    return " ".join(digits)
+
+
+def _say_phone(m: re.Match[str]) -> str:
+    raw = m.group(0)
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) < 7 or re.fullmatch(r"\s*\d{4}-\d{2}-\d{2}\s*", raw):  # not ISO dates
+        return raw
+    lead = raw[: len(raw) - len(raw.lstrip())]
+    trail = raw[len(raw.rstrip()) :]
+    rest = raw.strip()
+    prefix = ""
+    if rest.startswith("+") and len(digits) == 12 and digits.startswith("91"):
+        prefix = "plus 9 1, "
+        rest = re.sub(r"^\+\s*9\s*1[\s-]*", "", rest)
+    elif rest.startswith("+"):
+        prefix = "plus "
+        rest = rest[1:]
+    groups = [g for g in re.split(r"[\s-]+", rest) if g]
+    if len(groups) == 1:
+        d = groups[0]
+        groups = [d[:5], d[5:]] if len(d) == 10 else [d[i : i + 3] for i in range(0, len(d), 3)]
+    return lead + prefix + ", ".join(_spell(g) for g in groups) + trail
+
+
+async def speakable_numbers(text: str, _text_type: Any = None) -> str:
+    """TTS-only: phone numbers and leading-zero codes digit by digit."""
+    return _LEADING_ZERO.sub(lambda m: _spell(m.group(0)), _PHONE.sub(_say_phone, text))
+
+
 def is_action_claim(sentence: str) -> bool:
     return bool(_CLAIM.search(sentence)) and not _NOT_A_CLAIM.search(sentence)
 

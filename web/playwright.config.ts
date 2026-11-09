@@ -1,7 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// The smoke test drives the real stack: start the agent first (`make agent`, or `make dev` for both).
-// The web app is started here if it isn't already running.
+// Drives the real app: serverless by default (the web app's own API; started here if it isn't running).
 export default defineConfig({
   testDir: "./e2e",
   timeout: 120_000,
@@ -14,10 +13,8 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:3000",
-    reuseExistingServer: true,
-    timeout: 120_000,
-  },
+  // Testing a deployed site (WEB_URL=https://…): don't start a local server.
+  webServer: process.env.WEB_URL
+    ? undefined
+    : { command: "npm run dev", url: "http://localhost:3000", reuseExistingServer: true, timeout: 120_000 },
 });

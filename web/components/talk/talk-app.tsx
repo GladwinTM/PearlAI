@@ -14,7 +14,9 @@ import { resetDemo } from "@/lib/chat";
 import { initialTalk, talkReducer } from "@/lib/talk";
 import { useChat } from "@/lib/use-chat";
 import { usePersona } from "@/lib/use-persona";
+import { prewarmBrowserVoice, useBrowserVoice } from "@/lib/use-browser-voice";
 import { useVoice } from "@/lib/use-voice";
+import { BACKEND } from "@/lib/config";
 import { cn } from "@/lib/utils";
 
 import { Composer } from "./composer";
@@ -34,8 +36,16 @@ export function TalkApp() {
   const { health } = useHealth();
   const [persona, setPersona] = usePersona();
   const [state, dispatch] = useReducer(talkReducer, undefined, initialTalk);
-  const [mode, setMode] = useState<Mode>(params.get("mode") === "chat" ? "chat" : "voice");
+  // The URL is the source of truth for the mode (?mode=voice | chat): links, the toggle and back/forward all agree,
+  // even when Next keeps this page alive between visits.
+  const mode: Mode = params.get("mode") === "chat" ? "chat" : "voice";
   const [explaining, setExplaining] = useState(params.get("mode") === "voice");
+  const [prevMode, setPrevMode] = useState<Mode>(mode);
+  if (mode !== prevMode) {
+    // Arrived on a different mode (a link or the toggle): show the mic explainer for voice, nothing for chat.
+    setPrevMode(mode);
+    setExplaining(mode === "voice");
+  }
   const [suggestion, setSuggestion] = useState<string | null>(params.get("mode") === "chat" ? null : params.get("prompt"));
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [pane, setPane] = useState<MobilePane>("talk");
@@ -45,7 +55,13 @@ export function TalkApp() {
 
   const chat = useChat({ dispatch, persona, conversationId: state.conversationId });
   // Refs are pulled out by name so the React Compiler can tell them apart from render values.
-  const { audioRef, localLevel, remoteLevel, ...voice } = useVoice({ dispatch, persona, conversationId: state.conversationId });
+  // Serverless (default): voice runs in the browser. With NEXT_PUBLIC_AGENT_URL: the Python agent's WebRTC pipeline.
+  // Both hooks are always called (rules of hooks); only one is ever started.
+  const browserVoice = useBrowserVoice({ dispatch, persona, conversationId: state.conversationId });
+  const pipecatVoice = useVoice({ dispatch, persona, conversationId: state.conversationId });
+  const { audioRef, localLevel, remoteLevel, ...voice } = BACKEND === "python" ? pipecatVoice : browserVoice;
+  const engine = BACKEND === "python" ? "" : browserVoice.engine;
+  const waiting = BACKEND === "python" ? false : browserVoice.waiting;
   const live = voice.status === "live" || voice.status === "connecting";
 
   // A "things to try" chip clicked on the landing page arrives as ?prompt=…: sent once in chat, a suggestion in voice.
@@ -57,6 +73,11 @@ export function TalkApp() {
     if (mode === "chat") void chat.send(prompt);
     router.replace(`/talk?mode=${mode}`, { scroll: false });
   }, [params, mode, chat, router]);
+
+  // While the mic explainer is up, warm the in-browser VAD so the call starts faster.
+  useEffect(() => {
+    if (explaining && BACKEND === "serverless") prewarmBrowserVoice();
+  }, [explaining]);
 
   // Outcomes → toast, calendar refresh and jump to the booked week.
   const seen = useRef(0);
@@ -97,9 +118,8 @@ export function TalkApp() {
   const switchMode = async (next: Mode) => {
     if (next === mode) return;
     if (next === "chat" && voice.status === "live") await voice.end();
-    setMode(next);
+    router.replace(`/talk?mode=${next}`, { scroll: false });
     setSuggestion(null);
-    setExplaining(false);
     if (state.conversationId) dispatch({ type: "info", channel: next, text: `Switched to ${next}: same conversation` });
   };
 
@@ -213,6 +233,8 @@ export function TalkApp() {
                   explaining={explaining}
                   error={voice.error}
                   audioBlocked={voice.audioBlocked}
+                  engine={engine}
+                  waiting={waiting}
                   suggestion={suggestion}
                   onExplain={() => setExplaining(true)}
                   onCancelExplain={() => setExplaining(false)}

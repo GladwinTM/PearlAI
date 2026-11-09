@@ -23,7 +23,7 @@ export default function Home() {
           </Button>
         )}
         <Button asChild size="sm" className="rounded-full">
-          <Link href="/talk">Try it</Link>
+          <Link href="/talk?mode=voice">Try it</Link>
         </Button>
       </SiteHeader>
       <main className="flex-1 bg-pearl-glow">

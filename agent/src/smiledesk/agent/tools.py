@@ -581,6 +581,7 @@ def lookup_patient(ctx: ToolContext, phone: str) -> ToolResult:
     out: ToolResult = {
         "found": True,
         "phone": e164,
+        "number_ending": e164[-4:],
         "patients": patients,
         "next_step": "If the caller asked a question about the clinic (prices, insurance, parking, hours, payment, "
         "policies), call get_clinic_info now. If they said what visit and which day they want, call check_availability "

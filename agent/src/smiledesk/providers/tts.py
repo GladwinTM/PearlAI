@@ -93,13 +93,13 @@ class KokoroTTS:
     def pipecat_service(self) -> Any:
         from pipecat.services.kokoro.tts import KokoroTTSService
 
-        from smiledesk.voice.text import speakable_times
+        from smiledesk.voice.text import speakable_numbers, speakable_times
 
         install_shared_kokoro()
         # TTS-level transforms change only what is synthesized; captions and the LLM context keep "12:00 PM".
         return KokoroTTSService(
             settings=KokoroTTSService.Settings(voice=self.voice),
-            text_transforms=[("*", speakable_times)],
+            text_transforms=[("*", speakable_numbers), ("*", speakable_times)],
             # Kokoro synthesizes a whole sentence before the first byte. On a loaded laptop that can exceed Pipecat's
             # 3 s default, which reports "completed with no audio" and, three times in a row, marks the voice
             # unusable for the rest of the call. Slow is not broken: wait longer.

@@ -3,9 +3,11 @@ import { expect, test } from "@playwright/test";
 const BOOT = '[role="dialog"][aria-labelledby="boot-title"]';
 
 test.beforeEach(async ({ request }) => {
-  // Start from known demo data so the run is repeatable.
-  const agent = process.env.AGENT_URL ?? "http://localhost:8000";
-  await request.post(`${agent}/api/demo/reset`);
+  // Start from known demo data so the run is repeatable. Serverless (default): the web app's own API;
+  // AGENT_URL=http://localhost:8000 when testing against the Python agent.
+  const api = process.env.AGENT_URL ?? "";
+  const res = await request.post(`${api}/api/demo/reset`);
+  expect(res.ok()).toBe(true);
 });
 
 test("landing → chat as a persona → send a chip → tool call shows in the Inspector", async ({ page }) => {
@@ -38,7 +40,7 @@ test("landing → chat as a persona → send a chip → tool call shows in the I
 test("404 page links back to Pearl", async ({ page }) => {
   await page.goto("/no-such-page");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("gone for a cleaning");
-  await expect(page.getByRole("link", { name: "Talk to Pearl" })).toHaveAttribute("href", "/talk");
+  await expect(page.getByRole("link", { name: "Talk to Pearl" })).toHaveAttribute("href", "/talk?mode=voice");
 });
 
 test("mic explainer appears before the browser prompt, and Not now dismisses it", async ({ page }) => {
@@ -49,4 +51,24 @@ test("mic explainer appears before the browser prompt, and Not now dismisses it"
   await explainer.getByRole("button", { name: "Not now" }).click();
   await expect(explainer).toHaveCount(0);
   await expect(page.getByTestId("start-call")).toBeVisible();
+});
+
+test("the URL follows the mode: toggle and landing CTAs", async ({ page }) => {
+  await page.goto("/talk?mode=chat");
+  await expect(page.locator(BOOT)).toHaveCount(0, { timeout: 90_000 });
+  await page.getByTestId("mode-voice").click();
+  await expect(page).toHaveURL(/\/talk\?mode=voice/);
+  await expect(page.getByRole("region", { name: "Microphone permission" })).toBeVisible();
+  await page.getByTestId("mode-chat").click();
+  await expect(page).toHaveURL(/\/talk\?mode=chat/);
+
+  // Back to the landing page, then "Talk to Pearl": the Talk page (kept alive by Next) must switch to voice.
+  await page.goto("/");
+  await page.getByTestId("cta-voice").click();
+  await expect(page).toHaveURL(/\/talk\?mode=voice/);
+  await expect(page.getByTestId("mode-voice")).toHaveAttribute("aria-selected", "true");
+  await page.goto("/");
+  await page.getByTestId("cta-chat").click();
+  await expect(page).toHaveURL(/\/talk\?mode=chat/);
+  await expect(page.getByTestId("mode-chat")).toHaveAttribute("aria-selected", "true");
 });

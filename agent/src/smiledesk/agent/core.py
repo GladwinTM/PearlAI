@@ -145,6 +145,23 @@ class _ThinkFilter:
         return out
 
 
+def recover_failed_tool_call(e: APIError) -> ToolCall | None:
+    body = e.body if isinstance(e.body, dict) else {}
+    err = body.get("error", body) if isinstance(body, dict) else {}
+    if not isinstance(err, dict) or err.get("code") != "tool_use_failed" or not err.get("failed_generation"):
+        return None
+    try:
+        g = json.loads(err["failed_generation"])
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(g, dict) or g.get("name") not in {t["function"]["name"] for t in TOOL_SCHEMAS}:
+        return None
+    args = g.get("arguments")
+    return ToolCall(
+        f"call_{uuid.uuid4().hex[:8]}", g["name"], args if isinstance(args, str) else json.dumps(args or {})
+    )
+
+
 class OpenAIChatLLM:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
@@ -154,15 +171,25 @@ class OpenAIChatLLM:
     async def stream(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], tool_choice: str
     ) -> AsyncIterator[TextDelta | Completed]:
-        resp = await self.client.chat.completions.create(
-            model=self.model,
-            messages=cast(Any, messages),
-            tools=cast(Any, tools),
-            tool_choice=cast(Any, tool_choice),
-            temperature=self.settings.llm_temperature,
-            stream=True,
-            extra_body=llm_extra_body(self.settings),
-        )
+        try:
+            resp = await self.client.chat.completions.create(
+                model=self.model,
+                messages=cast(Any, messages),
+                tools=cast(Any, tools),
+                tool_choice=cast(Any, tool_choice),
+                temperature=self.settings.llm_temperature,
+                stream=True,
+                extra_body=llm_extra_body(self.settings),
+            )
+        except APIError as e:
+            # Groq validates tool arguments server-side (e.g. rejects {"patient_id": null}) but returns what the
+            # model meant to call: run that instead of failing the turn (null arguments are dropped by execute_tool).
+            recovered = recover_failed_tool_call(e)
+            if recovered is None:
+                raise
+            logger.info(f"recovered a tool call the provider rejected: {recovered.name}")
+            yield Completed([recovered])
+            return
         acc: dict[int, dict[str, str]] = {}
         think = _ThinkFilter()
         async for chunk in resp:
@@ -346,6 +373,9 @@ async def _run_turn(conv: Conversation, user_text: str, llm: ChatLLM) -> AsyncIt
     system = render(conv.prompt_version, clinic, now())
     called: list[str] = []
     spoken: list[str] = []  # all assistant text this turn, across tool rounds
+    notes: list[str] = []  # clinic-system notes attached to this user turn
+    opening = ""  # text code said at the start of Pearl's reply (kept in her history too)
+    last_result: dict[str, Any] = {}
     nudged = False
     final_text = ""
     outcome_before = conv.ctx.outcome
@@ -354,10 +384,11 @@ async def _run_turn(conv: Conversation, user_text: str, llm: ChatLLM) -> AsyncIt
         nonlocal final_text
         history = _trim(conv.messages)
         msgs: list[dict[str, Any]] = [{"role": "system", "content": system}]
+        turn_notes = ([safety.instruction] if safety.triggered else []) + notes
         for m in history:
-            if safety.triggered and m is conv.messages[user_idx]:
+            if turn_notes and m is conv.messages[user_idx]:
                 # Attached to the user turn: qwen3's Ollama template drops mid-conversation system messages.
-                note = f"\n\n[Clinic system note, not from the patient: {safety.instruction}]"
+                note = f"\n\n[Clinic system note, not from the patient: {' '.join(turn_notes)}]"
                 msgs.append({**m, "content": m["content"] + note})
             else:
                 msgs.append(m)
@@ -395,6 +426,8 @@ async def _run_turn(conv: Conversation, user_text: str, llm: ChatLLM) -> AsyncIt
         timings["tools_ms"] += ms
         called.append(call.name)
         conv.grounded_times |= times_in(result)
+        last_result.clear()
+        last_result.update(result)
         yield {"type": "tool_result", "id": call.id, "name": call.name, "result": result, "ms": ms}
         conv.messages.append(
             {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result, ensure_ascii=False)}
@@ -434,6 +467,17 @@ async def _run_turn(conv: Conversation, user_text: str, llm: ChatLLM) -> AsyncIt
             )
             async for ev in run_tool(call, auto=True):
                 yield ev
+            # Known caller: confirm the number once, in code (reliable), then let the model answer the request.
+            patients = last_result.get("patients") or []
+            if last_result.get("found") and patients and last_result.get("number_ending"):
+                first = str(patients[0]["full_name"]).split()[0]
+                opening = f"Hi {first}, is this you on the number ending {last_result['number_ending']}? "
+                spoken.append(opening.strip())
+                yield {"type": "token", "text": opening}
+                notes.append(
+                    f'Your reply has already started with "{opening.strip()}" (the caller\'s number is confirmed by caller '
+                    "ID). Don't greet or confirm the number again, and don't ask for it: just answer their request."
+                )
 
         for rnd in range(MAX_TOOL_ROUNDS + 1):
             timings["rounds"] = rnd + 1
@@ -481,46 +525,13 @@ async def _run_turn(conv: Conversation, user_text: str, llm: ChatLLM) -> AsyncIt
                 async for ev in run_tool(call):
                     yield ev
 
-        # Safety backstop: if a red flag fired and the model didn't escalate, do it deterministically.
-        if safety.triggered and "escalate_to_human" not in called:
-            logger.warning("safety rule fired but the model did not escalate; escalating automatically")
-            call = ToolCall(
-                f"auto_{uuid.uuid4().hex[:8]}",
-                "escalate_to_human",
-                json.dumps(
-                    {
-                        "reason": f"Safety backstop: {', '.join(safety.rules)}. Patient said: {user_text[:200]}",
-                        "urgency": "urgent",
-                    }
-                ),
-            )
-            conv.messages.append(
-                {
-                    "role": "assistant",
-                    "content": "",
-                    "tool_calls": [
-                        {
-                            "id": call.id,
-                            "type": "function",
-                            "function": {"name": call.name, "arguments": call.arguments},
-                        }
-                    ],
-                }
-            )
-            async for ev in run_tool(call, auto=True):
-                yield ev
-            # Escalation always happens; only add what Pearl hasn't already told them.
-            said = final_text.lower()
-            note = (
-                "" if re.search(r"\bstaff\b|\bcall you\b", said) else " A staff member will call you within 15 minutes."
-            )
-            if safety.breathing_or_swallowing and "emergency" not in said:
-                note += " If breathing or swallowing is getting harder, please go to the nearest hospital emergency department now."
-            if note:
-                final_text = (final_text + note).strip()
-                spoken.append(note.strip())
-                conv.messages.append({"role": "assistant", "content": final_text})
-                yield {"type": "token", "text": note}
+        # Keep code-said openings in Pearl's own history, so "yes, that's me" makes sense next turn.
+        if opening:
+            for m in reversed(conv.messages):
+                if m["role"] == "assistant" and not m.get("tool_calls") and str(m.get("content") or "").strip():
+                    if not m["content"].startswith(opening.strip()):
+                        m["content"] = opening + m["content"]
+                    break
 
         if not final_text.strip():
             final_text = "Sorry, I didn't catch that. Could you say it again?"
@@ -534,6 +545,46 @@ async def _run_turn(conv: Conversation, user_text: str, llm: ChatLLM) -> AsyncIt
     except APIError as e:
         logger.error(f"LLM error: {e}")
         yield {"type": "error", "message": f"The language model returned an error: {e.message}"}
+
+    # Safety backstop: if a red flag fired and the model didn't escalate (or the model failed), escalate
+    # deterministically. Outside the try on purpose: an LLM error must never skip it.
+    if safety.triggered and "escalate_to_human" not in called:
+        logger.warning("safety rule fired but the model did not escalate; escalating automatically")
+        call = ToolCall(
+            f"auto_{uuid.uuid4().hex[:8]}",
+            "escalate_to_human",
+            json.dumps(
+                {
+                    "reason": f"Safety backstop: {', '.join(safety.rules)}. Patient said: {user_text[:200]}",
+                    "urgency": "urgent",
+                }
+            ),
+        )
+        conv.messages.append(
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": call.id,
+                        "type": "function",
+                        "function": {"name": call.name, "arguments": call.arguments},
+                    }
+                ],
+            }
+        )
+        async for ev in run_tool(call, auto=True):
+            yield ev
+        # Escalation always happens; only add what Pearl hasn't already told them.
+        said = final_text.lower()
+        note = "" if re.search(r"\bstaff\b|\bcall you\b", said) else " A staff member will call you within 15 minutes."
+        if safety.breathing_or_swallowing and "emergency" not in said:
+            note += " If breathing or swallowing is getting harder, please go to the nearest hospital emergency department now."
+        if note:
+            final_text = (final_text + note).strip()
+            spoken.append(note.strip())
+            conv.messages.append({"role": "assistant", "content": final_text})
+            yield {"type": "token", "text": note}
 
     total_ms = int((time.perf_counter() - t_turn) * 1000)
     timings["total_ms"] = total_ms

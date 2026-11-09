@@ -17,6 +17,9 @@ interface Props {
   explaining: boolean;
   error: { message: string; micDenied?: boolean } | null;
   audioBlocked: boolean;
+  engine?: string;
+  /** A request is being worked on and Pearl isn't talking yet. */
+  waiting?: boolean;
   suggestion: string | null;
   onExplain: () => void;
   onCancelExplain: () => void;
@@ -30,7 +33,7 @@ interface Props {
 const STATUS: Record<OrbMode, string> = {
   idle: "Ready when you are",
   listening: "Listening…",
-  thinking: "Thinking…",
+  thinking: "Pearl is looking into it…",
   speaking: "Pearl is speaking",
 };
 
@@ -44,9 +47,20 @@ export function VoiceStage(p: Props) {
         <Orb mode={live ? p.orb : p.status === "connecting" ? "thinking" : "idle"} level={p.level} />
       </div>
 
-      <p className="h-5 text-sm text-muted-foreground" aria-live="polite" data-testid="voice-status">
-        {p.status === "connecting" ? "Connecting…" : live ? STATUS[p.orb] : p.status === "ended" ? "Call ended" : ""}
-      </p>
+      {live && (p.waiting || p.orb === "thinking") ? (
+        <p
+          className="inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-sm font-medium text-accent-foreground"
+          aria-live="polite"
+          data-testid="voice-status"
+        >
+          <span className="size-2 animate-pulse rounded-full bg-primary" aria-hidden />
+          Pearl is looking into it… please hold on a moment
+        </p>
+      ) : (
+        <p className="h-5 text-sm text-muted-foreground" aria-live="polite" data-testid="voice-status">
+          {p.status === "connecting" ? "Connecting… Pearl will greet you in a second" : live ? STATUS[p.orb] : p.status === "ended" ? "Call ended" : ""}
+        </p>
+      )}
 
       <AnimatePresence mode="wait">
         {p.explaining && !live ? (
@@ -90,6 +104,8 @@ export function VoiceStage(p: Props) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {p.engine && p.status === "live" && <p className="text-xs text-muted-foreground">{p.engine}</p>}
 
       {p.audioBlocked && (
         <Button variant="secondary" onClick={p.onEnableAudio}>
