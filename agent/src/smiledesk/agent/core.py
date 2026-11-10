@@ -374,7 +374,6 @@ async def _run_turn(conv: Conversation, user_text: str, llm: ChatLLM) -> AsyncIt
     called: list[str] = []
     spoken: list[str] = []  # all assistant text this turn, across tool rounds
     notes: list[str] = []  # clinic-system notes attached to this user turn
-    opening = ""  # text code said at the start of Pearl's reply (kept in her history too)
     last_result: dict[str, Any] = {}
     nudged = False
     final_text = ""
@@ -467,16 +466,16 @@ async def _run_turn(conv: Conversation, user_text: str, llm: ChatLLM) -> AsyncIt
             )
             async for ev in run_tool(call, auto=True):
                 yield ev
-            # Known caller: confirm the number once, in code (reliable), then let the model answer the request.
+            # Known caller: greet by name now; the number is confirmed in the booking question (enforced by
+            # book_appointment's guard via ctx.confirm_number), not at the start of the call.
             patients = last_result.get("patients") or []
             if last_result.get("found") and patients and last_result.get("number_ending"):
                 first = str(patients[0]["full_name"]).split()[0]
-                opening = f"Hi {first}, is this you on the number ending {last_result['number_ending']}? "
-                spoken.append(opening.strip())
-                yield {"type": "token", "text": opening}
+                conv.ctx.confirm_number = str(last_result["number_ending"])
                 notes.append(
-                    f'Your reply has already started with "{opening.strip()}" (the caller\'s number is confirmed by caller '
-                    "ID). Don't greet or confirm the number again, and don't ask for it: just answer their request."
+                    f"Caller ID found {first}. Greet them by name and answer their request. Don't ask for their phone "
+                    "number and don't confirm it now: you'll confirm it in the booking question "
+                    f'("…, on the number ending {last_result["number_ending"]}?").'
                 )
 
         for rnd in range(MAX_TOOL_ROUNDS + 1):
@@ -524,14 +523,6 @@ async def _run_turn(conv: Conversation, user_text: str, llm: ChatLLM) -> AsyncIt
             for call in calls:
                 async for ev in run_tool(call):
                     yield ev
-
-        # Keep code-said openings in Pearl's own history, so "yes, that's me" makes sense next turn.
-        if opening:
-            for m in reversed(conv.messages):
-                if m["role"] == "assistant" and not m.get("tool_calls") and str(m.get("content") or "").strip():
-                    if not m["content"].startswith(opening.strip()):
-                        m["content"] = opening + m["content"]
-                    break
 
         if not final_text.strip():
             final_text = "Sorry, I didn't catch that. Could you say it again?"

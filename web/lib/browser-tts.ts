@@ -17,6 +17,21 @@ export interface TTSCallbacks {
 }
 
 const VOICE = "af_heart";
+/** If Kokoro hasn't produced a sentence within this, the device is too slow: switch to the built-in voice. */
+const KOKORO_TIMEOUT_MS = 4000;
+
+/**
+ * Phones and tablets: Kokoro (an 82M-parameter model, ~90–330 MB) is too heavy there and can leave Pearl silent while
+ * captions keep coming, so they use the browser's built-in voice for the whole call.
+ */
+export function isHandheld(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const uaMobile = (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData?.mobile;
+  if (uaMobile) return true;
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) return true;
+  // iPadOS reports a desktop Mac user agent, but has touch.
+  return /Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
+}
 
 export class BrowserTTS {
   private worker: Worker | null = null;
@@ -123,6 +138,17 @@ export class BrowserTTS {
     return Math.min(1, Math.sqrt(sum / this.levelBuf.length) * 4);
   }
 
+  /** Stop using Kokoro for this call; everything queued for it is spoken by the built-in voice instead. */
+  private useNativeFromNowOn(reason: string) {
+    if (!this.ready && !this.worker) return;
+    this.ready = false;
+    this.worker?.terminate();
+    this.worker = null;
+    for (const resolve of this.pending.values()) resolve(null);
+    this.pending.clear();
+    this.cb.onStatus?.("native", reason);
+  }
+
   speak(text: string) {
     const t = text.trim();
     if (!t) return;
@@ -169,9 +195,16 @@ export class BrowserTTS {
     while (this.queue.length && gen === this.generation) {
       const chunk = this.queue.shift()!;
       if (chunk.kind === "kokoro") {
-        const audio = await chunk.audio;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const late = new Promise<"late">((r) => (timer = setTimeout(() => r("late"), KOKORO_TIMEOUT_MS)));
+        const audio = await Promise.race([chunk.audio, late]);
+        clearTimeout(timer);
         if (gen !== this.generation) return;
-        if (audio) await this.playSamples(audio.samples, audio.rate, gen);
+        if (audio === "late") {
+          // Too slow on this device: never leave the caller in silence. The built-in voice takes over for good.
+          this.useNativeFromNowOn("Kokoro was too slow on this device");
+          await this.playNative(chunk.text, gen);
+        } else if (audio) await this.playSamples(audio.samples, audio.rate, gen);
         else await this.playNative(chunk.text, gen); // synthesis failed: say it anyway
       } else {
         await this.playNative(chunk.text, gen);

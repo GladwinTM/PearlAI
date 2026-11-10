@@ -72,9 +72,9 @@ async def test_caller_id_auto_lookup(clean_db: Client) -> None:
     first = ev[0]
     assert first["type"] == "tool_call" and first["name"] == "lookup_patient" and first.get("auto")
     assert ev[1]["result"]["found"]
-    # Known caller: the number is confirmed in code, once, and kept in Pearl's history.
-    assert ev[-1]["text"].startswith("Hi Ravi, is this you on the number ending 0001?")
-    assert conv.messages[-1]["content"].startswith("Hi Ravi, is this you on the number ending 0001?")
+    # Known caller: no number check up front; it's confirmed in the booking question (guarded by confirm_number).
+    assert ev[-1]["text"] == "Hi Ravi!"
+    assert conv.ctx.confirm_number == "0001"
     ev2 = await collect(conv, "Thanks", ScriptedLLM([("Bye", [])]))
     assert "tool_call" not in types(ev2)  # only once per conversation
 

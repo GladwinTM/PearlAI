@@ -199,7 +199,7 @@ export function TalkApp() {
       </SiteHeader>
 
       {/* mobile pane switcher */}
-      <nav aria-label="Panels" className="flex gap-1.5 overflow-x-auto border-b-2 border-edge-soft px-3 py-2 lg:hidden">
+      <nav aria-label="Panels" className="flex gap-1.5 overflow-x-auto border-b px-3 py-2 lg:hidden">
         {(
           [
             ["talk", "Talk", mode === "voice" ? Mic : MessageSquare],
@@ -215,7 +215,8 @@ export function TalkApp() {
 
       <main
         className={cn(
-          "mx-auto grid min-h-0 w-full max-w-[1600px] flex-1 grid-cols-1 gap-4 p-3 lg:p-4",
+          // One row, exactly the screen height: only the panels inside scroll, never the page.
+          "mx-auto grid min-h-0 w-full max-w-[1600px] flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] gap-4 p-3 lg:p-4",
           inspectorOpen ? "lg:grid-cols-[minmax(300px,340px)_minmax(0,1fr)_minmax(320px,400px)]" : "lg:grid-cols-[minmax(300px,340px)_minmax(0,1fr)]",
         )}
       >
@@ -227,7 +228,7 @@ export function TalkApp() {
           <h1 className="sr-only">Talk to Pearl</h1>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
             <PersonaSwitcher value={persona} onChange={onPersona} disabled={live || chat.busy} compact className="min-w-0 flex-1" />
-            <div role="tablist" aria-label="Voice or chat" className="brick flex shrink-0 self-start rounded-full bg-card p-1 [--brick-depth:3px] sm:self-auto">
+            <div role="tablist" aria-label="Voice or chat" className="flex shrink-0 rounded-lg bg-muted p-1">
               {(["voice", "chat"] as const).map((m) => (
                 <button
                   key={m}
@@ -237,8 +238,8 @@ export function TalkApp() {
                   data-testid={`mode-${m}`}
                   onClick={() => void switchMode(m)}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold transition-colors",
-                    mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                    "inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-sm font-medium transition-colors sm:flex-none",
+                    mode === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {m === "voice" ? <Mic className="size-3.5" aria-hidden /> : <MessageSquare className="size-3.5" aria-hidden />}
@@ -248,9 +249,10 @@ export function TalkApp() {
             </div>
           </div>
 
-          <div className="brick-soft flex min-h-0 flex-1 flex-col rounded-[1.75rem] bg-card p-3">
+          {/* Scrolls as a whole if its content is taller than the screen (phones), so nothing is clipped. */}
+          <div className="brick-soft flex min-h-0 flex-1 flex-col overflow-y-auto rounded-2xl bg-card p-3">
             {mode === "voice" && (
-              <div className="shrink-0 py-2">
+              <div className="shrink-0 pb-2">
                 <VoiceStage
                   status={voice.status}
                   orb={voice.orb}
@@ -277,7 +279,7 @@ export function TalkApp() {
                 />
               </div>
             )}
-            <Transcript messages={state.messages} empty={empty} className="flex-1" />
+            <Transcript messages={state.messages} empty={empty} className="min-h-40 flex-1" />
             {mode === "voice" && !live && state.messages.length === 0 && (
               <TryChips onPick={onChip} label="Things to try saying" className="mt-2" />
             )}
@@ -301,7 +303,7 @@ export function TalkApp() {
           aria-label="Inspector"
           className={cn("min-h-0 flex-col", pane === "inspector" ? "flex" : "hidden", inspectorOpen ? "lg:flex" : "lg:hidden")}
         >
-          <h2 className="mb-2 font-display text-lg font-bold uppercase">See how it works</h2>
+          <h2 className="mb-2 text-sm font-semibold">See how it works</h2>
           <Inspector timeline={state.timeline} latencies={state.latencies} className="flex-1" />
         </aside>
       </main>

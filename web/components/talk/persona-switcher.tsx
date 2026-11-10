@@ -1,7 +1,6 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { motion } from "motion/react";
 import type { KeyboardEvent } from "react";
 
 import { ToothMark, type ToothFace } from "@/components/pearl/tooth-mark";
@@ -14,17 +13,17 @@ interface Props {
   disabled?: boolean;
   /** One row of small chips (talk page). */
   compact?: boolean;
-  /** Tall colourful cards with a tooth each (landing page). */
+  /** Cards with a tooth avatar (landing page). */
   cards?: boolean;
   className?: string;
 }
 
-// Card colour and tooth per persona. Navy text on all of these fills is ≥ 6:1.
-const LOOK: Record<string, { bg: string; face: ToothFace; baby?: boolean }> = {
-  ravi: { bg: "bg-yellow", face: "smile" },
-  anjali: { bg: "bg-coral", face: "open" },
-  ravi_meena: { bg: "bg-lime", face: "smile", baby: true },
-  new: { bg: "bg-lavender", face: "confused" },
+// A small tooth avatar per persona (a big tooth and a baby tooth for "Ravi for Meena").
+const AVATAR: Record<string, { face: ToothFace; baby?: boolean }> = {
+  ravi: { face: "smile" },
+  anjali: { face: "open" },
+  ravi_meena: { face: "smile", baby: true },
+  new: { face: "confused" },
 };
 
 /** "Who are you?" for recruiters: each persona carries a caller ID, so nobody types phone numbers. */
@@ -43,12 +42,12 @@ export function PersonaSwitcher({ value, onChange, disabled, compact, cards, cla
     return (
       <fieldset className={cn("min-w-0", className)} disabled={disabled}>
         <legend className="sr-only">Who are you calling as?</legend>
-        <div role="radiogroup" aria-label="Persona" className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+        <div role="radiogroup" aria-label="Persona" className="grid grid-cols-1 gap-3 min-[460px]:grid-cols-2 lg:grid-cols-4">
           {PERSONAS.map((p) => {
             const active = p.id === value;
-            const look = LOOK[p.id] ?? LOOK.new;
+            const look = AVATAR[p.id] ?? AVATAR.new;
             return (
-              <motion.button
+              <button
                 key={p.id}
                 type="button"
                 role="radio"
@@ -57,31 +56,29 @@ export function PersonaSwitcher({ value, onChange, disabled, compact, cards, cla
                 onClick={() => onChange(p.id)}
                 onKeyDown={onKeyDown}
                 tabIndex={active ? 0 : -1}
-                // The picked card hops.
-                animate={active ? { y: [0, -18, 0] } : { y: 0 }}
-                transition={{ duration: 0.38, ease: "easeOut" }}
                 className={cn(
-                  "brick press group relative flex min-h-56 flex-col overflow-hidden rounded-[2rem] p-4 text-left text-deep sm:min-h-72 sm:p-5",
-                  look.bg,
-                  active && "outline-4 outline-offset-4 outline-primary",
+                  "group relative flex items-center gap-4 rounded-2xl border bg-card p-4 text-left shadow-xs transition-all hover:border-primary/40 hover:shadow-sm",
+                  active && "border-primary ring-1 ring-primary",
                 )}
               >
-                <span className="font-display text-2xl leading-[0.95] font-bold uppercase sm:text-3xl">{p.label}</span>
-                <span className="mt-1 text-sm font-medium">{p.description}</span>
+                <span aria-hidden className="stage flex h-16 w-16 shrink-0 items-end justify-center rounded-xl pb-1.5">
+                  <ToothMark face={look.face} className="h-11 w-auto" />
+                  {look.baby && <ToothMark face="open" className="-ml-1.5 h-6 w-auto" />}
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-semibold">{p.label}</span>
+                  <span className="block text-sm text-muted-foreground">{p.description}</span>
+                </span>
                 <span
                   aria-hidden
                   className={cn(
-                    "brick absolute top-4 right-4 grid size-8 place-items-center rounded-full bg-card transition-transform [--brick-depth:2px]",
+                    "absolute top-3 right-3 grid size-5 place-items-center rounded-full bg-primary text-primary-foreground transition-transform",
                     active ? "scale-100" : "scale-0",
                   )}
                 >
-                  <Check className="size-4 text-foreground" strokeWidth={3} />
+                  <Check className="size-3" strokeWidth={3} />
                 </span>
-                <span aria-hidden className="mt-auto flex items-end justify-center pt-3">
-                  <ToothMark face={look.face} className="h-24 w-auto transition-transform group-hover:-rotate-6 sm:h-32" />
-                  {look.baby && <ToothMark face="open" className="-ml-3 h-12 w-auto sm:h-16" />}
-                </span>
-              </motion.button>
+              </button>
             );
           })}
         </div>
@@ -91,11 +88,15 @@ export function PersonaSwitcher({ value, onChange, disabled, compact, cards, cla
 
   return (
     <fieldset className={cn("min-w-0", className)} disabled={disabled}>
-      <legend className={cn("mb-2 text-sm font-semibold", compact && "sr-only")}>Who are you calling as?</legend>
+      <legend className={cn("mb-2 text-sm font-medium", compact && "sr-only")}>Who are you calling as?</legend>
       <div
         role="radiogroup"
         aria-label="Persona"
-        className={cn(compact ? "-mx-1 flex gap-1.5 overflow-x-auto px-1 pt-0.5 pb-1.5 [scrollbar-width:none]" : "grid grid-cols-1 gap-2 min-[420px]:grid-cols-2")}
+        className={cn(
+          compact
+            ? "-mx-1 flex gap-1.5 overflow-x-auto px-1 py-0.5 [mask-image:linear-gradient(to_right,black_85%,transparent)] [scrollbar-width:none] sm:[mask-image:none]"
+            : "grid grid-cols-1 gap-2 min-[420px]:grid-cols-2",
+        )}
       >
         {PERSONAS.map((p) => {
           const active = p.id === value;
@@ -110,25 +111,15 @@ export function PersonaSwitcher({ value, onChange, disabled, compact, cards, cla
               onKeyDown={onKeyDown}
               tabIndex={active ? 0 : -1}
               className={cn(
-                "group relative flex shrink-0 items-center gap-2 rounded-full px-3 text-left transition-colors disabled:opacity-60",
-                compact ? cn("py-1 pr-3", active ? "pl-1" : "pl-3") : "py-2.5",
-                active ? "brick bg-yellow text-deep [--brick-depth:2px]" : "border-2 border-edge-soft bg-card hover:bg-accent",
+                "flex shrink-0 items-center gap-1.5 rounded-full border px-3 text-left text-sm transition-colors disabled:opacity-60",
+                compact ? "py-1" : "py-2",
+                active ? "border-primary/40 bg-primary/10 font-medium text-primary" : "bg-card text-foreground hover:bg-muted",
               )}
             >
-              <span
-                aria-hidden
-                className={cn(
-                  "grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold",
-                  compact && !active && "hidden",
-                  active ? "bg-card text-foreground" : "bg-muted text-muted-foreground",
-                  compact && "size-6 text-[0.65rem]",
-                )}
-              >
-                {active ? <Check className="size-3.5" strokeWidth={3} /> : p.initials}
-              </span>
+              {active && <Check className="size-3.5" strokeWidth={3} aria-hidden />}
               <span className="min-w-0">
-                <span className={cn("block text-sm font-semibold", !compact && "truncate")}>{p.label}</span>
-                {!compact && <span className="block truncate text-xs opacity-80">{p.description}</span>}
+                <span className={cn("block", !compact && "truncate font-medium")}>{p.label}</span>
+                {!compact && <span className="block truncate text-xs text-muted-foreground">{p.description}</span>}
               </span>
             </button>
           );

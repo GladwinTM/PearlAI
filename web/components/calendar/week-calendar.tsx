@@ -122,7 +122,7 @@ export function WeekCalendar({ live, refreshKey = 0, focusDate, className }: Pro
     <section aria-label="Live calendar" className={cn("flex min-h-0 flex-col gap-3", className)}>
       <div className="flex items-center gap-2">
         <div className="min-w-0">
-          <h2 className="font-display text-lg leading-tight font-bold uppercase">Live calendar</h2>
+          <h2 className="text-sm font-semibold">Live calendar</h2>
           <p className="text-xs text-muted-foreground">
             {RANGE_FMT.format(days[0])} – {RANGE_FMT.format(days[5])}
             {live && (
@@ -145,9 +145,9 @@ export function WeekCalendar({ live, refreshKey = 0, focusDate, className }: Pro
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       {!data ? (
-        <Skeleton className="h-[360px] w-full rounded-[1.5rem]" />
+        <Skeleton className="h-[360px] w-full rounded-2xl" />
       ) : (
-        <div className="brick-soft rounded-[1.5rem] bg-card p-2.5">
+        <div className="brick-soft rounded-2xl bg-card p-2.5">
           <div className="grid grid-cols-[3.25rem_repeat(6,minmax(0,1fr))] gap-1">
             <span />
             {days.map((d) => {
@@ -162,7 +162,7 @@ export function WeekCalendar({ live, refreshKey = 0, focusDate, className }: Pro
                   className={cn(
                     "rounded-lg py-1 text-center text-[0.7rem] leading-tight font-medium transition-colors hover:bg-accent",
                     iso === today && "font-bold text-primary",
-                    iso === selectedDay && "bg-yellow text-deep",
+                    iso === selectedDay && "bg-primary/10 text-primary",
                   )}
                 >
                   {DAY_FMT.format(d)}
@@ -210,7 +210,7 @@ export function WeekCalendar({ live, refreshKey = 0, focusDate, className }: Pro
       </ul>
 
       {selectedDay && (
-        <div className="brick-soft rounded-[1.25rem] bg-card p-3 [--brick-depth:3px]" aria-live="polite">
+        <div className="brick-soft rounded-xl bg-card p-3" aria-live="polite">
           <h3 className="mb-2 text-xs font-semibold">
             {new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "short" }).format(new Date(`${selectedDay}T12:00:00`))}
           </h3>
@@ -303,7 +303,7 @@ function DentistRow({
                     className={cn(
                       "absolute inset-x-0.5 rounded-[4px]",
                       byPearl ? "bg-primary" : a.is_fixture ? "bg-muted-foreground/35" : "bg-chart-2/60",
-                      isFresh && "z-10 shadow-[0_2px_0_var(--edge)] ring-2 ring-edge",
+                      isFresh && "z-10 ring-2 ring-primary ring-offset-1 ring-offset-card",
                     )}
                     style={{ top: pct(Math.max(a.start, open)), height: `max(3px, calc(${pct(a.end)} - ${pct(Math.max(a.start, open))} - 1px))` }}
                     title={`${a.appointment_name} · ${fmtTime(a.start)}–${fmtTime(a.end)} · ${a.patient_display}${a.is_fixture ? " (demo fixture)" : ""}`}

@@ -58,7 +58,7 @@ def test_every_event_carries_type_and_conversation_continues(client: TestClient)
     cid = ev1[0]["conversation_id"]
     assert [e["name"] for e in ev1 if e["type"] == "tool_call"] == ["lookup_patient"]  # caller ID, first turn only
     assert ev1[-1]["type"] == "done"
-    assert ev1[-1]["text"] == "Hi Ravi, is this you on the number ending 0001? I can see 1 user messages."
+    assert ev1[-1]["text"] == "I can see 1 user messages."  # no number check up front: it comes with the booking
 
     r2 = client.post("/api/chat", json={"message": "checkup", "persona": "ravi", "conversation_id": cid})
     ev2 = parse_sse(r2.text)

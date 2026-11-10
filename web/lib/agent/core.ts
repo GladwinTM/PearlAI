@@ -317,7 +317,6 @@ export async function* runTurn(conv: Conversation, userText: string, model: Chat
   const outcomeBefore = conv.ctx.outcome;
 
   const notes: string[] = []; // clinic-system notes attached to this user turn
-  let opening = ""; // text code said at the start of Pearl's reply (kept in her history too)
   let lastResult: Record<string, unknown> | null = null;
   const runTool = async function* (call: ToolCall, auto = false): AsyncGenerator<AgentEvent> {
     const [args, parseError] = parseArgs(call.arguments);
@@ -341,17 +340,16 @@ export async function* runTurn(conv: Conversation, userText: string, model: Chat
       const call = { id: `auto_${crypto.randomUUID().slice(0, 8)}`, name: "lookup_patient", arguments: JSON.stringify({ phone: callerPhone }) };
       conv.messages.push(callMsg(call));
       yield* runTool(call, true);
-      // Known caller: confirm the number once, in code (reliable), then let the model answer the request.
+      // Known caller: greet by name now; the number is confirmed in the booking question (enforced by
+      // book_appointment's guard via ctx.confirmNumber), not at the start of the call.
       const found = lastResult as { found?: boolean; number_ending?: string; patients?: { full_name: string }[] } | null;
       const first = found?.found ? found.patients?.[0]?.full_name.split(" ")[0] : null;
       if (first && found?.number_ending) {
-        const check = `Hi ${first}, is this you on the number ending ${found.number_ending}? `;
-        opening = check;
-        spoken.push(check.trim());
-        yield { type: "token", text: check };
+        conv.ctx.confirmNumber = found.number_ending;
         notes.push(
-          `Your reply has already started with "${check.trim()}" (the caller's number is confirmed by caller ID). ` +
-            "Don't greet or confirm the number again, and don't ask for it: just answer their request.",
+          `Caller ID found ${first}. Greet them by name and answer their request. Don't ask for their phone ` +
+            "number and don't confirm it now: you'll confirm it in the booking question " +
+            `("…, on the number ending ${found.number_ending}?").`,
         );
       }
     }
@@ -424,12 +422,6 @@ export async function* runTurn(conv: Conversation, userText: string, model: Chat
         break;
       }
       for (const call of calls) yield* runTool(call);
-    }
-
-    // Keep code-said openings in Pearl's own history, so "yes, that's me" makes sense next turn.
-    if (opening) {
-      const reply = [...conv.messages].reverse().find((m) => m.role === "assistant" && !m.tool_calls?.length && m.content.trim());
-      if (reply && !reply.content.startsWith(opening.trim())) reply.content = opening + reply.content;
     }
 
     if (!finalText.trim()) {

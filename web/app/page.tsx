@@ -34,8 +34,8 @@ export default function Home() {
         <HowItWorks />
         <LocalBadges />
       </main>
-      <footer className="border-t-2 border-edge-soft py-8 text-center text-sm text-muted-foreground">
-        <ToothMark face="wink" className="mx-auto mb-2 h-10 w-auto" />
+      <footer className="border-t py-8 text-center text-sm text-muted-foreground">
+        <ToothMark className="mx-auto mb-2 h-8 w-auto" />
         SmileDesk is a portfolio demo. Pearl Dental Care, its dentists and patients are fictional.
       </footer>
     </BootGate>

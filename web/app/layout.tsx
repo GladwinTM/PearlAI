@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fredoka, Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 
 import { HealthProvider } from "@/components/boot/health-provider";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -10,8 +10,6 @@ import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
-// Headlines: big, heavy and rounded (variable font, one file).
-const fredoka = Fredoka({ variable: "--font-fredoka", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: { default: "SmileDesk · Meet Pearl", template: "%s · SmileDesk" },
@@ -20,14 +18,14 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#e9f0fd" },
-    { media: "(prefers-color-scheme: dark)", color: "#08103a" },
+    { media: "(prefers-color-scheme: light)", color: "#fbfcfe" },
+    { media: "(prefers-color-scheme: dark)", color: "#0d1324" },
   ],
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} ${fredoka.variable} h-full antialiased`}>
+    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col">
         <ThemeProvider>
           <TooltipProvider delayDuration={200}>

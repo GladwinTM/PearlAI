@@ -2,7 +2,7 @@
 
 import { type Dispatch, useCallback, useEffect, useRef, useState } from "react";
 
-import { BrowserTTS } from "./browser-tts";
+import { BrowserTTS, isHandheld } from "./browser-tts";
 import { streamChat } from "./chat";
 import { AGENT_URL } from "./config";
 import { type TalkAction, voiceLatency } from "./talk";
@@ -365,7 +365,9 @@ export function useBrowserVoice({ dispatch, persona, conversationId }: Options) 
       await v.start();
       void t.resume().catch(() => setAudioBlocked(true)); // iOS interrupts playback when the mic starts
       if (t.speaking) vad.current.setOptions(VAD_WHILE_PEARL_SPEAKS);
-      t.startKokoro();
+      // Phones keep the built-in voice for the whole call (Kokoro is too heavy there); desktops load Kokoro now.
+      if (isHandheld()) setEngine("Voice: your phone's built-in voice");
+      else t.startKokoro();
 
       const tick = () => {
         remoteLevel.current = tts.current?.level() ?? 0;

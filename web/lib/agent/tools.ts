@@ -34,6 +34,7 @@ export interface ToolState {
   patientId: string | null;
   allowedPhones: string[];
   offered: string[];
+  confirmNumber?: string | null;
   byHandle: Record<string, string>;
 }
 
@@ -47,6 +48,8 @@ export class ToolContext {
   offered = new Set<string>();
   /** Pearl's last message before the current turn. Writes need it to confirm that slot. null = guard off. */
   lastAssistantText: string | null = null;
+  /** Caller ID found the caller: the last 4 digits they must confirm in the booking question (cleared once booked). */
+  confirmNumber: string | null = null;
   private byHandle: Record<string, string> = {};
   private byUuid: Record<string, string> = {};
 
@@ -85,6 +88,7 @@ export class ToolContext {
       patientId: this.patientId,
       allowedPhones: [...this.allowedPhones],
       offered: [...this.offered],
+      confirmNumber: this.confirmNumber,
       byHandle: this.byHandle,
     };
   }
@@ -96,6 +100,7 @@ export class ToolContext {
     ctx.patientId = s?.patientId ?? null;
     ctx.allowedPhones = new Set(s?.allowedPhones ?? []);
     ctx.offered = new Set(s?.offered ?? []);
+    ctx.confirmNumber = s?.confirmNumber ?? null;
     for (const [h, u] of Object.entries(s?.byHandle ?? {})) {
       ctx.byHandle[h] = u;
       ctx.byUuid[u] = h;
@@ -127,7 +132,11 @@ export function assistantTextBeforeLastUser(messages: Msg[]): string {
 }
 
 /** A write needs the caller's yes to a question that named exactly this slot's time. */
-function unconfirmed(ctx: ToolContext, when: Date, tz: string): ToolResult | null {
+/**
+ * A write needs the caller's yes to a question that named exactly this slot's time. With `number` (a booking for a
+ * caller found by caller ID), that question must also name their number ending: confirmed just before booking.
+ */
+function unconfirmed(ctx: ToolContext, when: Date, tz: string, number = false): ToolResult | null {
   const prev = ctx.lastAssistantText;
   if (prev === null) return null;
   const text = prev.replace(/\b(Dr|Mr|Mrs|Ms|St)\./g, "$1"); // "Dr. Priya" isn't the end of a sentence
@@ -137,7 +146,16 @@ function unconfirmed(ctx: ToolContext, when: Date, tz: string): ToolResult | nul
     const asked = spokenTimes(questions[questions.length - 1]);
     const all = spokenTimes(text);
     const only = (s: Set<string>) => s.size === 1 && s.has(target);
-    if (only(asked) || (asked.size === 0 && only(all))) return null;
+    if (only(asked) || (asked.size === 0 && only(all))) {
+      const ending = number ? ctx.confirmNumber : null;
+      if (!ending || new RegExp(`(?<!\\d)${ending}(?!\\d)`).test(questions[questions.length - 1])) return null;
+      return err(
+        "Not confirmed yet: the caller hasn't confirmed their phone number.",
+        `Don't book yet. Ask the same question again, naming who, the visit, the dentist, ` +
+          `${fmtDay(localParts(when, tz).date)}, ${fmtTime(when, tz)} and their number ` +
+          `("Shall I book …, on the number ending ${ending}?"), then wait for their yes.`,
+      );
+    }
   }
   return err(
     "Not confirmed yet: the caller hasn't said yes to this exact slot.",
@@ -734,7 +752,7 @@ async function bookAppointment(ctx: ToolContext, a: Args): Promise<ToolResult> {
       "That time wasn't returned by check_availability in this conversation.",
       "Call check_availability for that day, offer the real times, and confirm with the patient before booking.",
     );
-  const notConfirmed = unconfirmed(ctx, when, c.tz);
+  const notConfirmed = unconfirmed(ctx, when, c.tz, true);
   if (notConfirmed) return notConfirmed;
   let appt: ApptRow;
   try {
@@ -765,6 +783,7 @@ async function bookAppointment(ctx: ToolContext, a: Args): Promise<ToolResult> {
   }
   ctx.outcome = "booked";
   ctx.patientId = pid;
+  ctx.confirmNumber = null; // confirmed with this booking
   const s = apptSummary(ctx, appt, c);
   const name = rows<{ full_name: string }>(await db().from("patients").select("full_name").eq("id", pid))[0].full_name;
   return { booked: true, ...s, patient: name, summary: `${t.name} with ${s.dentist} on ${s.when} for ${name}` };

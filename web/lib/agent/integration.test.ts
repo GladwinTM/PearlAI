@@ -91,8 +91,15 @@ describe("with local Supabase", () => {
     const args = { patient_id: "P1", dentist_id: slot.dentist_id, appointment_type: "checkup", starts_at: slot.start };
     ctx.lastAssistantText = `I have ${alts.map((a) => a.label).join(" or ")}. Which suits you?`;
     expect(String((await executeTool("book_appointment", args, ctx))[0].error)).toContain("Not confirmed");
+    // Caller ID found Ravi: the confirmation question must name his number too.
+    ctx.confirmNumber = "0001";
     ctx.lastAssistantText = `The earliest is ${slot.label}. Shall I book it for you?`;
+    const [noNumber] = await executeTool("book_appointment", args, ctx);
+    expect(String(noNumber.error)).toContain("phone number");
+    expect(String(noNumber.hint)).toContain("number ending 0001");
+    ctx.lastAssistantText = `The earliest is ${slot.label}. Shall I book it for you, on the number ending 0001?`;
     const [booked] = await executeTool("book_appointment", args, ctx);
+    expect(ctx.confirmNumber).toBeNull();
     expect(booked.booked).toBe(true);
     expect(String(booked.summary)).toContain("Ravi Kumar");
 
@@ -111,10 +118,9 @@ describe("with local Supabase", () => {
     const conv = newConversation(null, "ravi", "chat", "v2");
     const ev = await collect(conv, "Hello", new ScriptedLLM([["Hi Ravi!", []]]));
     expect(ev[0]).toMatchObject({ type: "tool_call", name: "lookup_patient", auto: true });
-    // Known caller: the number is confirmed in code, once, and kept in Pearl's history.
-    expect(ev.find((e) => e.type === "token")).toMatchObject({ text: "Hi Ravi, is this you on the number ending 0001? " });
-    expect(String(ev.at(-1)!.text)).toBe("Hi Ravi, is this you on the number ending 0001? Hi Ravi!");
-    expect(conv.messages.at(-1)).toMatchObject({ role: "assistant", content: "Hi Ravi, is this you on the number ending 0001? Hi Ravi! " });
+    // Known caller: no number check up front; it's confirmed in the booking question (guarded by confirmNumber).
+    expect(String(ev.at(-1)!.text)).toBe("Hi Ravi!");
+    expect(conv.ctx.confirmNumber).toBe("0001");
     const ev2 = await collect(conv, "Thanks", new ScriptedLLM([["Bye", []]]));
     expect(ev2.some((e) => e.type === "tool_call")).toBe(false);
   });

@@ -9,10 +9,11 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-display);
-  --font-display: var(--font-fredoka);
+  --font-heading: var(--font-geist-sans);
+  --font-display: var(--font-geist-sans);
   --color-edge: var(--edge);
   --color-edge-soft: var(--edge-soft);
+  --color-stage: var(--stage);
   --color-sky: var(--sky);
   --color-ice: var(--ice);
   --color-blue: var(--blue);
@@ -64,45 +65,48 @@
 }
 
 :root {
-  /* Light "Lego" theme: ice-blue page, white cards, navy text, bright fills. Text pairs are ≥ 4.5:1 (WCAG AA). */
-  --background: oklch(0.95 0.03 258);
-  --foreground: oklch(0.219 0.119 266);
+  /* Calm, professional light theme: near-white page, white cards, deep navy text, one strong blue.
+     Text pairs are ≥ 4.5:1 (WCAG AA). */
+  --background: oklch(0.985 0.004 255);
+  --foreground: oklch(0.23 0.06 265);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.219 0.119 266);
+  --card-foreground: oklch(0.23 0.06 265);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.219 0.119 266);
+  --popover-foreground: oklch(0.23 0.06 265);
   --primary: oklch(0.54 0.21 262); /* white text on it: 5.3:1 */
   --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.876 0.056 263);
-  --secondary-foreground: oklch(0.219 0.119 266);
-  --muted: oklch(0.915 0.035 258);
-  --muted-foreground: oklch(0.44 0.09 264);
-  --accent: oklch(0.9 0.055 255);
-  --accent-foreground: oklch(0.219 0.119 266);
+  --secondary: oklch(0.96 0.012 255);
+  --secondary-foreground: oklch(0.23 0.06 265);
+  --muted: oklch(0.965 0.008 255);
+  --muted-foreground: oklch(0.47 0.03 262);
+  --accent: oklch(0.955 0.02 255);
+  --accent-foreground: oklch(0.23 0.06 265);
   --destructive: oklch(0.55 0.2 27);
-  --border: oklch(0.84 0.045 260);
-  --input: oklch(0.8 0.05 260);
+  --border: oklch(0.915 0.012 258);
+  --input: oklch(0.88 0.016 258);
   --ring: oklch(0.54 0.21 262);
   --success: oklch(0.5 0.13 150);
   --warning: oklch(0.55 0.12 65);
-  /* Toy edges: the outline and the solid "brick" shadow under chunky elements. */
-  --edge: oklch(0.219 0.119 266);
-  --edge-soft: oklch(0.8 0.06 262);
+  /* Pearl's stage: a soft blue surface behind the tooth. */
+  --stage: oklch(0.93 0.045 255);
+  --stage-2: oklch(0.86 0.08 255);
+  --edge: oklch(0.915 0.012 258);
+  --edge-soft: oklch(0.915 0.012 258);
   --chart-1: oklch(0.54 0.21 262);
-  --chart-2: oklch(0.709 0.184 29);
-  --chart-3: oklch(0.72 0.18 134);
-  --chart-4: oklch(0.8 0.159 86);
-  --chart-5: oklch(0.65 0.13 294);
-  --radius: 1rem;
-  --sidebar: oklch(0.97 0.02 258);
-  --sidebar-foreground: oklch(0.219 0.119 266);
+  --chart-2: oklch(0.68 0.17 29);
+  --chart-3: oklch(0.68 0.16 150);
+  --chart-4: oklch(0.78 0.15 80);
+  --chart-5: oklch(0.6 0.15 294);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.98 0.005 255);
+  --sidebar-foreground: oklch(0.23 0.06 265);
   --sidebar-primary: oklch(0.54 0.21 262);
   --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.9 0.055 255);
-  --sidebar-accent-foreground: oklch(0.219 0.119 266);
-  --sidebar-border: oklch(0.84 0.045 260);
+  --sidebar-accent: oklch(0.955 0.02 255);
+  --sidebar-accent-foreground: oklch(0.23 0.06 265);
+  --sidebar-border: oklch(0.915 0.012 258);
   --sidebar-ring: oklch(0.54 0.21 262);
-  /* "Lego" palette (fills; text on them stays navy, or white on royal/deep). */
+  /* Palette (fills and status only; text on them stays navy, or white on royal/deep). */
   --sky: oklch(0.768 0.123 250);
   --ice: oklch(0.876 0.056 263);
   --blue: oklch(0.595 0.214 261);
@@ -120,49 +124,51 @@
   --tooth-glove: oklch(1 0 0);
   --tooth-mouth: oklch(0.27 0.07 350);
   --tooth-tongue: oklch(0.74 0.15 15);
-  --tooth-shadow: var(--deep);
+  --tooth-shadow: oklch(0.3 0.08 262);
   --sparkle: var(--yellow);
   --heart: oklch(0.72 0.17 0);
 }
 
 .dark {
-  /* Deep navy night with the same bright fills. */
-  --background: oklch(0.17 0.075 266);
-  --foreground: oklch(0.97 0.012 260);
-  --card: oklch(0.225 0.085 266);
-  --card-foreground: oklch(0.97 0.012 260);
-  --popover: oklch(0.225 0.085 266);
-  --popover-foreground: oklch(0.97 0.012 260);
-  --primary: oklch(0.74 0.14 252); /* navy text on it: 7.7:1 */
-  --primary-foreground: oklch(0.219 0.119 266);
-  --secondary: oklch(0.3 0.09 266);
-  --secondary-foreground: oklch(0.97 0.012 260);
-  --muted: oklch(0.27 0.08 266);
-  --muted-foreground: oklch(0.8 0.045 260);
-  --accent: oklch(0.32 0.1 264);
-  --accent-foreground: oklch(0.97 0.012 260);
-  --destructive: oklch(0.72 0.17 27);
-  --border: oklch(0.36 0.08 266);
-  --input: oklch(0.4 0.08 266);
-  --ring: oklch(0.74 0.14 252);
-  --success: oklch(0.8 0.15 150);
-  --warning: oklch(0.83 0.13 80);
-  --edge: oklch(0.08 0.04 266);
-  --edge-soft: oklch(0.11 0.05 266);
-  --chart-1: oklch(0.74 0.14 252);
-  --chart-2: oklch(0.75 0.17 29);
-  --chart-3: oklch(0.8 0.18 134);
-  --chart-4: oklch(0.86 0.159 86);
-  --chart-5: oklch(0.78 0.11 294);
-  --sidebar: oklch(0.2 0.08 266);
-  --sidebar-foreground: oklch(0.97 0.012 260);
-  --sidebar-primary: oklch(0.74 0.14 252);
-  --sidebar-primary-foreground: oklch(0.219 0.119 266);
-  --sidebar-accent: oklch(0.32 0.1 264);
-  --sidebar-accent-foreground: oklch(0.97 0.012 260);
-  --sidebar-border: oklch(0.36 0.08 266);
-  --sidebar-ring: oklch(0.74 0.14 252);
-  --tooth-shadow: oklch(0.08 0.04 266);
+  /* Deep navy, low saturation, same blue accent. */
+  --background: oklch(0.165 0.03 265);
+  --foreground: oklch(0.96 0.008 260);
+  --card: oklch(0.205 0.034 265);
+  --card-foreground: oklch(0.96 0.008 260);
+  --popover: oklch(0.205 0.034 265);
+  --popover-foreground: oklch(0.96 0.008 260);
+  --primary: oklch(0.72 0.14 254); /* navy text on it: ≥ 7:1 */
+  --primary-foreground: oklch(0.2 0.06 265);
+  --secondary: oklch(0.25 0.035 265);
+  --secondary-foreground: oklch(0.96 0.008 260);
+  --muted: oklch(0.24 0.032 265);
+  --muted-foreground: oklch(0.76 0.025 260);
+  --accent: oklch(0.27 0.045 263);
+  --accent-foreground: oklch(0.96 0.008 260);
+  --destructive: oklch(0.7 0.17 27);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.72 0.14 254);
+  --success: oklch(0.78 0.15 150);
+  --warning: oklch(0.82 0.13 80);
+  --stage: oklch(0.25 0.06 262);
+  --stage-2: oklch(0.32 0.1 260);
+  --edge: oklch(1 0 0 / 10%);
+  --edge-soft: oklch(1 0 0 / 10%);
+  --chart-1: oklch(0.72 0.14 254);
+  --chart-2: oklch(0.74 0.16 29);
+  --chart-3: oklch(0.76 0.15 150);
+  --chart-4: oklch(0.84 0.14 80);
+  --chart-5: oklch(0.74 0.12 294);
+  --sidebar: oklch(0.19 0.032 265);
+  --sidebar-foreground: oklch(0.96 0.008 260);
+  --sidebar-primary: oklch(0.72 0.14 254);
+  --sidebar-primary-foreground: oklch(0.2 0.06 265);
+  --sidebar-accent: oklch(0.27 0.045 263);
+  --sidebar-accent-foreground: oklch(0.96 0.008 260);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.72 0.14 254);
+  --tooth-shadow: oklch(0.08 0.03 266);
 }
 
 @layer base {
@@ -185,46 +191,37 @@
 }
 
 @layer utilities {
-  /* A chunky toy block: outline + solid offset shadow. Pair with .press for the click. */
+  /* A card surface: hairline border + soft shadow. */
   .brick {
-    border: 2px solid var(--edge);
-    box-shadow: 0 var(--brick-depth, 5px) 0 var(--edge);
+    border: 1px solid var(--border);
+    box-shadow:
+      0 1px 2px oklch(0.2 0.05 265 / 6%),
+      0 4px 12px -4px oklch(0.2 0.05 265 / 8%);
   }
-  /* The calmer version for dense panels (calendar, transcript, Inspector). */
+  /* The flatter version for dense panels (calendar, transcript, Inspector). */
   .brick-soft {
-    border: 2px solid var(--edge-soft);
-    box-shadow: 0 var(--brick-depth, 4px) 0 var(--edge-soft);
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 2px oklch(0.2 0.05 265 / 5%);
   }
   .press {
     transition:
       transform 120ms ease,
-      box-shadow 120ms ease;
-  }
-  .press:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 calc(var(--brick-depth, 5px) + 1px) 0 var(--edge);
+      box-shadow 120ms ease,
+      background-color 120ms ease;
   }
   .press:active:not(:disabled) {
-    transform: translateY(calc(var(--brick-depth, 5px) - 1px));
-    box-shadow: 0 1px 0 var(--edge);
+    transform: scale(0.98);
   }
-  /* Lego studs: a subtle dot grid on a coloured surface. */
-  .studs {
-    background-image: radial-gradient(circle at center, color-mix(in oklch, var(--card) 28%, transparent) 0 3px, transparent 3.5px);
-    background-size: 28px 28px;
+  /* Pearl's stage: a soft blue gradient. */
+  .stage {
+    background:
+      radial-gradient(120% 90% at 50% 0%, var(--stage) 0%, transparent 70%),
+      linear-gradient(180deg, var(--stage) 0%, var(--stage-2) 100%);
   }
-  /* Blue "sky" surfaces look the same in both themes: pin the light-theme button/card colours on them. */
-  .on-sky {
-    --primary: oklch(0.54 0.21 262);
-    --primary-foreground: oklch(1 0 0);
-    --card: oklch(1 0 0);
-    --foreground: oklch(0.219 0.119 266);
-    --accent: oklch(0.9 0.055 255);
-    --edge: oklch(0.219 0.119 266);
-    color: var(--deep);
-  }
-  .text-brick {
-    text-shadow: 0 0.055em 0 var(--royal);
+  /* A faint dot grid for large hero surfaces. */
+  .dots {
+    background-image: radial-gradient(circle at center, color-mix(in oklch, var(--foreground) 9%, transparent) 0 1px, transparent 1.5px);
+    background-size: 22px 22px;
   }
 }
 

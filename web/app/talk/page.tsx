@@ -10,9 +10,9 @@ export const metadata: Metadata = { title: "Talk to Pearl" };
 function TalkSkeleton() {
   return (
     <div className="grid h-dvh gap-4 p-4 lg:grid-cols-[340px_1fr_400px]" aria-busy="true" aria-label="Loading">
-      <Skeleton className="hidden rounded-[1.5rem] lg:block" />
-      <Skeleton className="rounded-[1.5rem]" />
-      <Skeleton className="hidden rounded-[1.5rem] lg:block" />
+      <Skeleton className="hidden rounded-2xl lg:block" />
+      <Skeleton className="rounded-2xl" />
+      <Skeleton className="hidden rounded-2xl lg:block" />
     </div>
   );
 }

@@ -72,7 +72,7 @@ export function Transcript({ messages, empty, className }: Props) {
 function UserBubble({ m }: { m: Message }) {
   const text = (m.parts[0] as Extract<Part, { kind: "text" }>)?.text ?? "";
   return (
-    <div className={cn("brick max-w-[85%] rounded-[1.25rem] rounded-br-md bg-primary px-3.5 py-2 text-primary-foreground [--brick-depth:3px]", m.interim && "opacity-70")}>
+    <div className={cn("max-w-[85%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-primary-foreground shadow-xs", m.interim && "opacity-70")}>
       <span className="sr-only">You said: </span>
       {m.channel === "voice" && <Mic className="mr-1.5 inline size-3.5 -translate-y-px opacity-80" aria-hidden />}
       {text}
@@ -94,7 +94,7 @@ function PearlBubble({ m }: { m: Message }) {
           <div
             key={i}
             className={cn(
-              "brick-soft rounded-[1.25rem] rounded-bl-md bg-card px-3.5 py-2 [--brick-depth:3px]",
+              "rounded-2xl rounded-bl-md border bg-muted/60 px-3.5 py-2",
               p.retracted && "border-dashed bg-transparent text-muted-foreground shadow-none",
             )}
           >
@@ -125,8 +125,8 @@ function ToolPill({ p }: { p: Extract<Part, { kind: "tool" }> }) {
     <span
       data-testid="tool-pill"
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border-2 px-2.5 py-0.5 text-xs font-medium",
-        running ? "border-primary/50 bg-accent text-accent-foreground" : p.ok ? "border-edge-soft bg-card text-muted-foreground" : "border-destructive/50 text-destructive",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium",
+        running ? "border-primary/50 bg-accent text-accent-foreground" : p.ok ? "bg-card text-muted-foreground" : "border-destructive/50 text-destructive",
       )}
     >
       {running ? <Loader2 className="size-3 animate-spin" aria-hidden /> : p.ok ? <Check className="size-3" aria-hidden /> : <X className="size-3" aria-hidden />}
@@ -156,9 +156,9 @@ function Notice({ p }: { p: Extract<Part, { kind: "notice" }> }) {
 
 function TypingDots() {
   return (
-    <span className="brick-soft inline-flex items-center gap-1 rounded-[1.25rem] rounded-bl-md bg-card px-3.5 py-3 [--brick-depth:3px]" aria-label="Pearl is typing">
+    <span className="inline-flex items-center gap-1 rounded-2xl rounded-bl-md border bg-muted/60 px-3.5 py-3" aria-label="Pearl is typing">
       {[0, 1, 2].map((i) => (
-        <span key={i} className="size-2 animate-bounce rounded-full bg-primary" style={{ animationDelay: `${i * 0.15}s` }} />
+        <span key={i} className="size-1.5 animate-bounce rounded-full bg-muted-foreground/70" style={{ animationDelay: `${i * 0.15}s` }} />
       ))}
     </span>
   );

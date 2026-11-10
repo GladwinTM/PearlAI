@@ -19,7 +19,7 @@ function ChatBuddy({ busy, expression }: { busy: boolean; expression: ToothExpre
       transition={busy ? { duration: 0.9, repeat: Infinity, ease: "easeInOut" } : { duration: 0.2 }}
     >
       <motion.div key={expression ?? "none"} initial={expression ? { scale: 0.7 } : false} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 500, damping: 12 }}>
-        <ToothMark face={face} className="h-12 w-auto drop-shadow-[0_3px_0_var(--edge-soft)]" />
+        <ToothMark face={face} className="h-11 w-auto" />
       </motion.div>
       {expression === "heart" && (
         <motion.svg
@@ -47,7 +47,7 @@ export function Composer({ onSend, busy, expression = null }: { onSend: (text: s
     <div className="flex items-end gap-2">
       <ChatBuddy busy={busy} expression={expression} />
       <form
-        className="brick-soft flex min-w-0 flex-1 items-end gap-2 rounded-[1.5rem] bg-card p-2 focus-within:border-primary"
+        className="brick-soft flex min-w-0 flex-1 items-end gap-2 rounded-2xl bg-card p-2 focus-within:border-primary"
         onSubmit={(e) => {
           e.preventDefault();
           submit();

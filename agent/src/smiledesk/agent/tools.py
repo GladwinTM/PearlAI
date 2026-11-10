@@ -48,6 +48,8 @@ class ToolContext:
     # Pearl's last message to the caller before the current turn (set by the chat loop and the voice pipeline).
     # Booking/rescheduling needs it to be a confirmation question naming that slot. None = not tracked: guard off.
     last_assistant_text: str | None = None
+    # Caller ID found the caller: the last 4 digits they must confirm in the booking question (cleared once booked).
+    confirm_number: str | None = None
     # handle ("P1", "A3") ↔ UUID, per conversation
     _by_handle: dict[str, str] = field(default_factory=dict)
     _by_uuid: dict[str, str] = field(default_factory=dict)
@@ -93,11 +95,13 @@ def assistant_text_before_last_user(messages: list[Any]) -> str:
     return ""
 
 
-def _unconfirmed(ctx: ToolContext, when: datetime) -> ToolResult | None:
+def _unconfirmed(ctx: ToolContext, when: datetime, *, number: bool = False) -> ToolResult | None:
     """A write needs the caller's yes to a question that named exactly this slot's time.
 
     Offering three options and hearing "the first one" is a choice, not a confirmation: small models book right
-    there. Code, not the prompt, makes them ask "Shall I book … at 9 AM?" first.
+    there. Code, not the prompt, makes them ask "Shall I book … at 9 AM?" first. With `number` (a booking for a
+    caller found by caller ID), that question must also name their number ending: the number is confirmed just
+    before booking, not at the start of the call.
     """
     prev = ctx.last_assistant_text
     if prev is None:
@@ -111,7 +115,15 @@ def _unconfirmed(ctx: ToolContext, when: datetime) -> ToolResult | None:
         asked = spoken_times(questions[-1])
         # "Shall I book Friday at 9 AM?", or "The earliest is Friday at 9 AM. Shall I book it?" (one time in total).
         if asked == target or (not asked and spoken_times(text) == target):
-            return None
+            ending = ctx.confirm_number if number else None
+            if not ending or re.search(rf"(?<!\d){ending}(?!\d)", questions[-1]):
+                return None
+            return err(
+                "Not confirmed yet: the caller hasn't confirmed their phone number.",
+                f"Don't book yet. Ask the same question again, naming who, the visit, the dentist, {fmt_day(when)}, "
+                f'{fmt_time(when)} and their number ("Shall I book …, on the number ending {ending}?"), then wait for '
+                "their yes.",
+            )
     return err(
         "Not confirmed yet: the caller hasn't said yes to this exact slot.",
         f"Don't book yet and don't say it's booked. Ask one question naming who, the visit, the dentist, "
@@ -782,7 +794,7 @@ def book_appointment(
             "That time wasn't returned by check_availability in this conversation.",
             "Call check_availability for that day, offer the real times, and confirm with the patient before booking.",
         )
-    if bad := _unconfirmed(ctx, when):
+    if bad := _unconfirmed(ctx, when, number=True):
         return bad
     params = {
         "p_patient_id": pid,
@@ -802,6 +814,7 @@ def book_appointment(
             out["alternatives"] = alt.get("slots") or alt.get("nearest_alternatives") or []
         return out
     ctx.outcome, ctx.patient_id = "booked", str(pid)
+    ctx.confirm_number = None  # confirmed with this booking
     s = _appt_summary(ctx, a, c)
     name = rows(get_db().table("patients").select("full_name").eq("id", pid).execute())[0]["full_name"]
     return {"booked": True, **s, "patient": name, "summary": f"{t.name} with {s['dentist']} on {s['when']} for {name}"}
